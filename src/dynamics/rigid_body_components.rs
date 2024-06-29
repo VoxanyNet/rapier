@@ -8,6 +8,7 @@ use crate::math::{
 };
 use crate::parry::partitioning::IndexedData;
 use crate::utils::{SimdAngularInertia, SimdCross, SimdDot};
+use diff::Diff;
 use num::Zero;
 
 /// The unique handle of a rigid body added to a `RigidBodySet`.
@@ -36,6 +37,24 @@ impl RigidBodyHandle {
     }
 }
 
+// struct RigidBodyHandleDiff(crate::data::arena::IndexDiff);
+
+impl Diff for RigidBodyHandle {
+    type Repr = <crate::data::arena::Index as Diff>::Repr;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        self.0.diff(&other.0)
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        self.0.apply(diff)
+    }
+
+    fn identity() -> Self {
+        RigidBodyHandle(crate::data::arena::Index::identity())
+    }
+}
+
 impl IndexedData for RigidBodyHandle {
     fn default() -> Self {
         Self(IndexedData::default())
@@ -50,7 +69,10 @@ impl IndexedData for RigidBodyHandle {
 #[deprecated(note = "renamed as RigidBodyType")]
 pub type BodyStatus = RigidBodyType;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, diff::Diff)]
+#[diff(attr(
+    #[derive(Serialize, Deserialize)]
+))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 /// The status of a body, governing the way it is affected by external forces.
 pub enum RigidBodyType {
@@ -118,6 +140,37 @@ bitflags::bitflags! {
     }
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyChangesDiff {
+    changes: Option<RigidBodyChanges>,
+}
+
+impl Diff for RigidBodyChanges {
+    type Repr = RigidBodyChangesDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyChangesDiff {
+            changes: None,
+        };
+
+        if other.bits() != self.bits() {
+            diff.changes = Some(*other);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(changes) = diff.changes {
+            *self = changes;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for RigidBodyChanges {
     fn default() -> Self {
         RigidBodyChanges::empty()
@@ -140,6 +193,48 @@ pub struct RigidBodyPosition {
     /// resolution. Then it is either validated (ie. we set position := set_position)
     /// or clamped by CCD.
     pub next_position: Isometry<Real>,
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyPositionDiff {
+    position: Option<Isometry<Real>>,
+    next_position: Option<Isometry<Real>>
+}
+impl Diff for RigidBodyPosition {
+    type Repr = RigidBodyPositionDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = RigidBodyPositionDiff {
+            position: None,
+            next_position: None,
+        };
+
+        if other.position != self.position {
+            diff.position = Some(other.position);
+        }
+
+        if other.next_position != self.next_position {
+            diff.next_position = Some(other.next_position);
+        }
+
+        diff
+
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(position) = diff.position {
+            self.position = position;
+        }
+
+        if let Some(next_position) = diff.next_position {
+            self.next_position = next_position;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
 }
 
 impl Default for RigidBodyPosition {
@@ -262,6 +357,88 @@ pub struct RigidBodyMassProps {
     /// The square-root of the world-space inverse angular inertia tensor of the rigid-body,
     /// taking into account rotation locking.
     pub effective_world_inv_inertia_sqrt: AngularInertia<Real>,
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyMassPropsDiff {
+    flags: Option<LockedAxes>,
+    local_mprops: Option<MassProperties>,
+    additional_local_mprops: Option<Option<Box<RigidBodyAdditionalMassProps>>>,
+    world_com: Option<Point<Real>>,
+    effective_inv_mass: Option<Vector<Real>>,
+    effective_world_inv_inertia_sqrt: Option<AngularInertia<Real>>
+}
+
+impl Diff for RigidBodyMassProps {
+    type Repr = RigidBodyMassPropsDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyMassPropsDiff {
+            flags: None,
+            local_mprops: None,
+            additional_local_mprops: None,
+            world_com: None,
+            effective_inv_mass: None,
+            effective_world_inv_inertia_sqrt: None,
+        };
+
+        if other.flags != self.flags {
+            diff.flags = Some(other.flags);
+        };
+
+        if other.local_mprops != self.local_mprops {
+            diff.local_mprops = Some(other.local_mprops);
+        };
+
+        if other.additional_local_mprops != self.additional_local_mprops {
+            diff.additional_local_mprops = Some(other.additional_local_mprops.clone());
+        };
+
+        if other.world_com != self.world_com {
+            diff.world_com = Some(other.world_com);
+        };
+
+        if other.effective_inv_mass != self.effective_inv_mass {
+            diff.effective_inv_mass = Some(other.effective_inv_mass);
+        };
+
+        if other.effective_world_inv_inertia_sqrt != self.effective_world_inv_inertia_sqrt {
+            diff.effective_world_inv_inertia_sqrt = Some(other.effective_world_inv_inertia_sqrt);
+        };
+
+        diff
+
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(flags) = diff.flags {
+            self.flags = flags;
+        }
+
+        if let Some(local_mprops) = diff.local_mprops {
+            self.local_mprops = local_mprops;
+        }
+
+        if let Some(additional_local_mprops) = diff.additional_local_mprops.clone() {
+            self.additional_local_mprops = additional_local_mprops;
+        }
+
+        if let Some(world_com) = diff.world_com {
+            self.world_com = world_com;
+        }
+
+        if let Some(effective_inv_mass) = diff.effective_inv_mass {
+            self.effective_inv_mass = effective_inv_mass;
+        }
+
+        if let Some(effective_world_inv_inertia_sqrt) = diff.effective_world_inv_inertia_sqrt {
+            self.effective_world_inv_inertia_sqrt = effective_world_inv_inertia_sqrt;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
 }
 
 impl Default for RigidBodyMassProps {
@@ -456,6 +633,47 @@ pub struct RigidBodyVelocity {
     pub linvel: Vector<Real>,
     /// The angular velocity of the rigid-body.
     pub angvel: AngVector<Real>,
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyVelocityDiff {
+    linvel: Option<Vector<Real>>,
+    angvel: Option<AngVector<Real>>,
+}
+
+impl Diff for RigidBodyVelocity {
+    type Repr = RigidBodyVelocityDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyVelocityDiff {
+            linvel: None,
+            angvel: None,
+        };
+
+        if other.linvel != self.linvel {
+            diff.linvel = Some(other.linvel);
+        }
+
+        if other.angvel != self.angvel {
+            diff.angvel = Some(other.angvel);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(linvel) = diff.linvel {
+            self.linvel = linvel;
+        }
+
+        if let Some(angvel) = diff.angvel {
+            self.angvel = angvel;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
 }
 
 impl Default for RigidBodyVelocity {
@@ -726,6 +944,47 @@ pub struct RigidBodyDamping {
     pub angular_damping: Real,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyDampingDiff {
+    linear_damping: Option<Real>,
+    angular_damping: Option<Real>,
+}
+
+impl Diff for RigidBodyDamping {
+    type Repr = RigidBodyDampingDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyDampingDiff {
+            linear_damping: None,
+            angular_damping: None,
+        };
+
+        if other.linear_damping != self.linear_damping {
+            diff.linear_damping = Some(other.linear_damping);
+        }
+
+        if other.angular_damping != self.angular_damping {
+            diff.angular_damping = Some(other.angular_damping);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(linear_damping) = diff.linear_damping {
+            self.linear_damping = linear_damping;
+        }
+
+        if let Some(angular_damping) = diff.angular_damping {
+            self.angular_damping = angular_damping;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for RigidBodyDamping {
     fn default() -> Self {
         Self {
@@ -751,6 +1010,78 @@ pub struct RigidBodyForces {
     /// Torque applied by the user.
     pub user_torque: AngVector<Real>,
 }
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyForcesDiff {
+    force: Option<Vector<Real>>,
+    torque: Option<AngVector<Real>>,
+    gravity_scale: Option<Real>,
+    user_force: Option<Vector<Real>>,
+    user_torque: Option<AngVector<Real>>,
+}
+
+impl Diff for RigidBodyForces {
+    type Repr = RigidBodyForcesDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyForcesDiff {
+            force: None,
+            torque: None,
+            gravity_scale: None,
+            user_force: None,
+            user_torque: None,
+        };
+
+        if other.force != self.force {
+            diff.force = Some(other.force);
+        }
+
+        if other.torque != self.torque {
+            diff.torque = Some(other.torque);
+        }
+
+        if other.gravity_scale != self.gravity_scale {
+            diff.gravity_scale = Some(other.gravity_scale);
+        }
+
+        if other.user_force != self.user_force {
+            diff.user_force = Some(other.user_force);
+        }
+
+        if other.user_torque != self.user_torque {
+            diff.user_torque = Some(other.user_torque);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(force) = diff.force {
+            self.force = force;
+        }
+
+        if let Some(torque) = diff.torque {
+            self.torque = torque;
+        }
+
+        if let Some(gravity_scale) = diff.gravity_scale {
+            self.gravity_scale = gravity_scale;
+        }
+
+        if let Some(user_force) = diff.user_force {
+            self.user_force = user_force;
+        }
+
+        if let Some(user_torque) = diff.user_torque {
+            self.user_torque = user_torque;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
 
 impl Default for RigidBodyForces {
     fn default() -> Self {
@@ -828,6 +1159,78 @@ pub struct RigidBodyCcd {
     pub soft_ccd_prediction: Real,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyCcdDiff {
+    ccd_thickness: Option<Real>,
+    ccd_max_dist: Option<Real>,
+    ccd_active: Option<bool>,
+    ccd_enabled: Option<bool>,
+    soft_ccd_prediction: Option<Real>,
+}
+
+impl Diff for RigidBodyCcd {
+    type Repr = RigidBodyCcdDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyCcdDiff {
+            ccd_thickness: None,
+            ccd_max_dist: None,
+            ccd_active: None,
+            ccd_enabled: None,
+            soft_ccd_prediction: None,
+        };
+
+        if other.ccd_thickness != self.ccd_thickness {
+            diff.ccd_thickness = Some(other.ccd_thickness);
+        }
+
+        if other.ccd_max_dist != self.ccd_max_dist {
+            diff.ccd_max_dist = Some(other.ccd_max_dist);
+        }
+
+        if other.ccd_active != self.ccd_active {
+            diff.ccd_active = Some(other.ccd_active);
+        }
+
+        if other.ccd_enabled != self.ccd_enabled {
+            diff.ccd_enabled = Some(other.ccd_enabled);
+        }
+
+        if other.soft_ccd_prediction != self.soft_ccd_prediction {
+            diff.soft_ccd_prediction = Some(other.soft_ccd_prediction);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(ccd_thickness) = diff.ccd_thickness {
+            self.ccd_thickness = ccd_thickness;
+        }
+
+        if let Some(ccd_max_dist) = diff.ccd_max_dist {
+            self.ccd_max_dist = ccd_max_dist;
+        }
+
+        if let Some(ccd_active) = diff.ccd_active {
+            self.ccd_active = ccd_active;
+        }
+
+        if let Some(ccd_enabled) = diff.ccd_enabled {
+            self.ccd_enabled = ccd_enabled;
+        }
+
+        if let Some(soft_ccd_prediction) = diff.soft_ccd_prediction {
+            self.soft_ccd_prediction = soft_ccd_prediction;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
+
 impl Default for RigidBodyCcd {
     fn default() -> Self {
         Self {
@@ -892,7 +1295,71 @@ pub struct RigidBodyIds {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct RigidBodyIdsDiff {
+    active_island_id: Option<usize>,
+    active_set_id: Option<usize>,
+    active_set_offset: Option<usize>,
+    active_set_timestamp: Option<u32>,
+}
+
+impl Diff for RigidBodyIds {
+    type Repr = RigidBodyIdsDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyIdsDiff {
+            active_island_id: None,
+            active_set_id: None,
+            active_set_offset: None,
+            active_set_timestamp: None,
+        };
+
+        if other.active_island_id != self.active_island_id {
+            diff.active_island_id = Some(other.active_island_id);
+        }
+
+        if other.active_set_id != self.active_set_id {
+            diff.active_set_id = Some(other.active_set_id);
+        }
+
+        if other.active_set_offset != self.active_set_offset {
+            diff.active_set_offset = Some(other.active_set_offset);
+        }
+
+        if other.active_set_timestamp != self.active_set_timestamp {
+            diff.active_set_timestamp = Some(other.active_set_timestamp);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(active_island_id) = diff.active_island_id {
+            self.active_island_id = active_island_id;
+        }
+
+        if let Some(active_set_id) = diff.active_set_id {
+            self.active_set_id = active_set_id;
+        }
+
+        if let Some(active_set_offset) = diff.active_set_offset {
+            self.active_set_offset = active_set_offset;
+        }
+
+        if let Some(active_set_timestamp) = diff.active_set_timestamp {
+            self.active_set_timestamp = active_set_timestamp;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+#[derive(Default, Clone, Debug, PartialEq, Eq, diff::Diff)]
+#[diff(attr(
+    #[derive(Serialize, Deserialize)]
+))]
 /// The set of colliders attached to this rigid-bodies.
 ///
 /// This should not be modified manually unless you really know what
@@ -979,6 +1446,37 @@ impl RigidBodyColliders {
 /// The dominance groups of a rigid-body.
 pub struct RigidBodyDominance(pub i8);
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyDominanceDiff {
+    dominance: Option<i8>,
+}
+
+impl Diff for RigidBodyDominance {
+    type Repr = RigidBodyDominanceDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyDominanceDiff {
+            dominance: None,
+        };
+
+        if other.0 != self.0 {
+            diff.dominance = Some(other.0);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(dominance) = diff.dominance {
+            self.0 = dominance;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
 impl RigidBodyDominance {
     /// The actual dominance group of this rigid-body, after taking into account its type.
     pub fn effective_group(&self, status: &RigidBodyType) -> i16 {
@@ -1010,6 +1508,77 @@ pub struct RigidBodyActivation {
     pub time_since_can_sleep: Real,
     /// Is this body sleeping?
     pub sleeping: bool,
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyActivationDiff {
+    normalized_linear_threshold: Option<Real>,
+    angular_threshold: Option<Real>,
+    time_until_sleep: Option<Real>,
+    time_since_can_sleep: Option<Real>,
+    sleeping: Option<bool>,
+}
+
+impl Diff for RigidBodyActivation {
+    type Repr = RigidBodyActivationDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyActivationDiff {
+            normalized_linear_threshold: None,
+            angular_threshold: None,
+            time_until_sleep: None,
+            time_since_can_sleep: None,
+            sleeping: None,
+        };
+
+        if other.normalized_linear_threshold != self.normalized_linear_threshold {
+            diff.normalized_linear_threshold = Some(other.normalized_linear_threshold);
+        }
+
+        if other.angular_threshold != self.angular_threshold {
+            diff.angular_threshold = Some(other.angular_threshold);
+        }
+
+        if other.time_until_sleep != self.time_until_sleep {
+            diff.time_until_sleep = Some(other.time_until_sleep);
+        }
+
+        if other.time_since_can_sleep != self.time_since_can_sleep {
+            diff.time_since_can_sleep = Some(other.time_since_can_sleep);
+        }
+
+        if other.sleeping != self.sleeping {
+            diff.sleeping = Some(other.sleeping);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(normalized_linear_threshold) = diff.normalized_linear_threshold {
+            self.normalized_linear_threshold = normalized_linear_threshold;
+        }
+
+        if let Some(angular_threshold) = diff.angular_threshold {
+            self.angular_threshold = angular_threshold;
+        }
+
+        if let Some(time_until_sleep) = diff.time_until_sleep {
+            self.time_until_sleep = time_until_sleep;
+        }
+
+        if let Some(time_since_can_sleep) = diff.time_since_can_sleep {
+            self.time_since_can_sleep = time_since_can_sleep;
+        }
+
+        if let Some(sleeping) = diff.sleeping {
+            self.sleeping = sleeping;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
 }
 
 impl Default for RigidBodyActivation {

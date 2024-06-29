@@ -8,7 +8,10 @@ use crate::geometry::{
 };
 use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector};
 use crate::utils::SimdCross;
+use diff::Diff;
 use num::Zero;
+
+use super::{RigidBodyActivationDiff, RigidBodyCcdDiff, RigidBodyChangesDiff, RigidBodyCollidersDiff, RigidBodyDampingDiff, RigidBodyDominanceDiff, RigidBodyForcesDiff, RigidBodyIdsDiff, RigidBodyMassPropsDiff, RigidBodyPositionDiff, RigidBodyTypeDiff, RigidBodyVelocityDiff};
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 /// A rigid body.
@@ -41,6 +44,187 @@ pub struct RigidBody {
     pub user_data: u128,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyDiff {
+    pos: Option<RigidBodyPositionDiff>,
+    mprops: Option<RigidBodyMassPropsDiff>,
+    integrated_vels: Option<RigidBodyVelocityDiff>,
+    vels: Option<RigidBodyVelocityDiff>,
+    damping: Option<RigidBodyDampingDiff>,
+    forces: Option<RigidBodyForcesDiff>,
+    ccd: Option<RigidBodyCcdDiff>,
+    ids: Option<RigidBodyIdsDiff>,
+    colliders: Option<RigidBodyCollidersDiff>,
+    activation: Option<RigidBodyActivationDiff>,
+    changes: Option<RigidBodyChangesDiff>,
+    body_type: Option<RigidBodyTypeDiff>,
+    dominance: Option<RigidBodyDominanceDiff>,
+    enabled: Option<bool>,
+    additional_solver_iterations: Option<usize>,
+    user_data: Option<u128>,
+}
+
+impl Diff for RigidBody {
+    type Repr = RigidBodyDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = RigidBodyDiff {
+            pos: None,
+            mprops: None,
+            integrated_vels: None,
+            vels: None,
+            damping: None,
+            forces: None,
+            ccd: None,
+            ids: None,
+            colliders: None,
+            activation: None,
+            changes: None,
+            body_type: None,
+            dominance: None,
+            enabled: None,
+            additional_solver_iterations: None,
+            user_data: None,
+        };
+
+        if self.pos != other.pos {
+            diff.pos = Some(self.pos.diff(&other.pos));
+        }
+
+        if self.mprops != other.mprops {
+            diff.mprops = Some(self.mprops.diff(&other.mprops));
+        }
+
+        if self.integrated_vels != other.integrated_vels {
+            diff.integrated_vels = Some(self.integrated_vels.diff(&other.integrated_vels));
+        }
+
+        if self.vels != other.vels {
+            diff.vels = Some(self.vels.diff(&other.vels));
+        }
+
+        if self.damping != other.damping {
+            diff.damping = Some(self.damping.diff(&other.damping));
+        }
+
+        if self.forces != other.forces {
+            diff.forces = Some(self.forces.diff(&other.forces));
+        }
+
+        if self.ccd != other.ccd {
+            diff.ccd = Some(self.ccd.diff(&other.ccd));
+        }
+
+        if self.ids != other.ids {
+            diff.ids = Some(self.ids.diff(&other.ids));
+        }
+
+        if self.colliders != other.colliders {
+            diff.colliders = Some(self.colliders.diff(&other.colliders));
+        }
+
+        if self.activation != other.activation {
+            diff.activation = Some(self.activation.diff(&other.activation));
+        }
+
+        if self.changes != other.changes {
+            diff.changes = Some(self.changes.diff(&other.changes));
+        }
+
+        if self.body_type != other.body_type {
+            diff.body_type = Some(self.body_type.diff(&other.body_type));
+        }
+
+        if self.dominance != other.dominance {
+            diff.dominance = Some(self.dominance.diff(&other.dominance));
+        }
+
+        if self.enabled != other.enabled {
+            diff.enabled = Some(other.enabled);
+        }
+
+        if self.additional_solver_iterations != other.additional_solver_iterations {
+            diff.additional_solver_iterations = Some(other.additional_solver_iterations);
+        }
+
+        if self.user_data != other.user_data {
+            diff.user_data = Some(other.user_data);
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(pos) = &diff.pos {
+            self.pos.apply(pos);
+        }
+
+        if let Some(mprops) = &diff.mprops {
+            self.mprops.apply(mprops);
+        }
+
+        if let Some(integrated_vels) = &diff.integrated_vels {
+            self.integrated_vels.apply(integrated_vels);
+        }
+
+        if let Some(vels) = &diff.vels {
+            self.vels.apply(vels);
+        }
+
+        if let Some(damping) = &diff.damping {
+            self.damping.apply(damping);
+        }
+
+        if let Some(forces) = &diff.forces {
+            self.forces.apply(forces);
+        }
+
+        if let Some(ccd) = &diff.ccd {
+            self.ccd.apply(ccd);
+        }
+
+        if let Some(ids) = &diff.ids {
+            self.ids.apply(ids);
+        }
+
+        if let Some(colliders) = &diff.colliders {
+            self.colliders.apply(colliders);
+        }
+
+        if let Some(activation) = &diff.activation {
+            self.activation.apply(activation);
+        }
+
+        if let Some(changes) = &diff.changes {
+            self.changes.apply(changes);
+        }
+
+        if let Some(body_type) = &diff.body_type {
+            self.body_type.apply(body_type);
+        }
+
+        if let Some(dominance) = &diff.dominance {
+            self.dominance.apply(dominance);
+        }
+
+        if let Some(enabled) = diff.enabled {
+            self.enabled = enabled;
+        }
+
+        if let Some(additional_solver_iterations) = diff.additional_solver_iterations {
+            self.additional_solver_iterations = additional_solver_iterations;
+        }
+
+        if let Some(user_data) = diff.user_data {
+            self.user_data = user_data;
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
 impl Default for RigidBody {
     fn default() -> Self {
         Self::new()
@@ -50,19 +234,19 @@ impl Default for RigidBody {
 impl RigidBody {
     fn new() -> Self {
         Self {
-            pos: RigidBodyPosition::default(),
-            mprops: RigidBodyMassProps::default(),
-            integrated_vels: RigidBodyVelocity::default(),
-            vels: RigidBodyVelocity::default(),
-            damping: RigidBodyDamping::default(),
-            forces: RigidBodyForces::default(),
-            ccd: RigidBodyCcd::default(),
-            ids: RigidBodyIds::default(),
-            colliders: RigidBodyColliders::default(),
-            activation: RigidBodyActivation::active(),
-            changes: RigidBodyChanges::all(),
-            body_type: RigidBodyType::Dynamic,
-            dominance: RigidBodyDominance::default(),
+            pos: RigidBodyPosition::default(), 
+            mprops: RigidBodyMassProps::default(), 
+            integrated_vels: RigidBodyVelocity::default(), 
+            vels: RigidBodyVelocity::default(), 
+            damping: RigidBodyDamping::default(), 
+            forces: RigidBodyForces::default(), 
+            ccd: RigidBodyCcd::default(), 
+            ids: RigidBodyIds::default(), 
+            colliders: RigidBodyColliders::default(), 
+            activation: RigidBodyActivation::active(), 
+            changes: RigidBodyChanges::all(), 
+            body_type: RigidBodyType::Dynamic, 
+            dominance: RigidBodyDominance::default(), 
             enabled: true,
             user_data: 0,
             additional_solver_iterations: 0,

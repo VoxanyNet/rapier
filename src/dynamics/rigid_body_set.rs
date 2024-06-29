@@ -1,3 +1,5 @@
+use diff::Diff;
+
 use crate::data::Arena;
 use crate::dynamics::{
     ImpulseJointSet, IslandManager, MultibodyJointSet, RigidBody, RigidBodyChanges, RigidBodyHandle,
@@ -33,6 +35,13 @@ pub struct RigidBodySet {
     pub(crate) bodies: Arena<RigidBody>,
     pub(crate) modified_bodies: Vec<RigidBodyHandle>,
 }
+
+// pub struct RigidBodySetDiff {
+    
+// }
+// impl Diff for RigidBodySet {
+//     type Repr = ;
+// }
 
 impl RigidBodySet {
     /// Create a new empty set of rigid bodies.

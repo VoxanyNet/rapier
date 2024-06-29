@@ -1,3 +1,5 @@
+use diff::Diff;
+
 use crate::dynamics::{CoefficientCombineRule, MassProperties, RigidBodyHandle, RigidBodyType};
 use crate::geometry::{BroadPhaseProxyIndex, InteractionGroups, Shape, SharedShape};
 use crate::math::{Isometry, Real};
@@ -30,6 +32,25 @@ impl ColliderHandle {
         ))
     }
 }
+
+// struct ColliderHandleDiff(crate::data::arena::IndexDiff);
+
+impl Diff for ColliderHandle {
+    type Repr = <crate::data::arena::Index as Diff>::Repr;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        self.0.diff(&other.0)
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        self.0.apply(diff)
+    }
+
+    fn identity() -> Self {
+        ColliderHandle(crate::data::arena::Index::identity())
+    }
+}
+
 
 impl IndexedData for ColliderHandle {
     fn default() -> Self {

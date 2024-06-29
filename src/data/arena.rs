@@ -3,6 +3,7 @@
 //! See <https://github.com/fitzgen/generational-arena/blob/master/src/lib.rs>.
 //! This has been modified to have a fully deterministic deserialization (including for the order of
 //! Index attribution after a deserialization of the arena).
+use diff::Diff;
 use parry::partitioning::IndexedData;
 use std::cmp;
 use std::iter::{self, Extend, FromIterator, FusedIterator};
@@ -13,7 +14,7 @@ use std::vec;
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
-///
+/// 
 /// [See the module-level documentation for example usage and motivation.](./index.html)
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -23,6 +24,8 @@ pub struct Arena<T> {
     free_list_head: Option<u32>,
     len: usize,
 }
+
+
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -50,6 +53,49 @@ enum Entry<T> {
 pub struct Index {
     index: u32,
     generation: u32,
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct IndexDiff {
+    index: Option<u32>,
+    generation: Option<u32>
+}
+
+impl Diff for Index {
+
+    type Repr = IndexDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = IndexDiff {
+            index: None,
+            generation: None
+        };
+
+        if other.index != self.index {
+            diff.index = Some(other.index);
+        };
+
+        if other.generation != self.generation {
+            diff.generation = Some(other.index);
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(index) = diff.index {
+            self.index = index;
+        }
+
+        if let Some(generation) = diff.generation {
+            self.generation = generation;
+        }
+    }
+
+    fn identity() -> Self {
+        Index { index: 0, generation: 0 }
+    }
 }
 
 impl Default for Index {
