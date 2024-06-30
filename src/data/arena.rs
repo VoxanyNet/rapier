@@ -3,7 +3,7 @@
 //! See <https://github.com/fitzgen/generational-arena/blob/master/src/lib.rs>.
 //! This has been modified to have a fully deterministic deserialization (including for the order of
 //! Index attribution after a deserialization of the arena).
-use diff::Diff;
+use diff::{Diff, VecDiff};
 use parry::partitioning::IndexedData;
 use std::cmp;
 use std::iter::{self, Extend, FromIterator, FusedIterator};
@@ -11,6 +11,8 @@ use std::mem;
 use std::ops;
 use std::slice;
 use std::vec;
+
+use crate::prelude::RigidBody;
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
@@ -25,14 +27,172 @@ pub struct Arena<T> {
     len: usize,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct ArenaDiff {
+    items: Option<VecDiff<Entry<RigidBody>>>,
+    generation: Option<u32>,
+    free_list_head: Option<Option<u32>>,
+    len: Option<usize>,
+}
+
+impl Diff for Arena<RigidBody> {
+    type Repr = ArenaDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = ArenaDiff {
+            items: None,
+            generation: None,
+            free_list_head: None,
+            len: None,
+        };
+
+        if other.items != self.items {
+            diff.items = Some(self.items.diff(&other.items));
+        };
+
+        if other.generation != self.generation {
+            diff.generation = Some(other.generation)
+        }
+
+        if other.free_list_head != self.free_list_head {
+            diff.free_list_head = Some(other.free_list_head)
+        }
+
+        if other.len != self.len {
+            diff.len = Some(other.len)
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(items) = &diff.items {
+            self.items.apply(items)
+        }
+
+        if let Some(generation) = &diff.generation {
+            self.generation = *generation
+        }
+
+        if let Some(free_list_head) = &diff.free_list_head {
+            self.free_list_head = *free_list_head
+        }
+
+        if let Some(len) = &diff.len {
+            self.len = *len
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
 
 
-#[derive(Clone, Debug)]
+
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 enum Entry<T> {
     Free { next_free: Option<u32> },
     Occupied { generation: u32, value: T },
 }
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub enum EntryDiff<T> {
+    Free { next_free: Option<Option<u32>> },
+    Occupied { generation: Option<u32>, value: Option<T> },
+}
+
+impl Diff for Entry<RigidBody> {
+    type Repr = EntryDiff<RigidBody>;
+
+    fn diff(&self, other: &Entry<RigidBody>) -> Self::Repr {
+
+        // this syntax is CRAZY
+        let diff = match (self, other) {
+            (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
+
+                let mut diff = EntryDiff::<RigidBody>::Free {
+                    next_free: None
+                }; 
+
+                if other_next_free != next_free {
+                    diff = EntryDiff::<RigidBody>::Free {
+                        next_free: Some(*other_next_free)
+                    };
+                };
+
+                diff
+
+            },
+            (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
+
+                // this can probably be optimized
+                let mut diff = EntryDiff::<RigidBody>::Occupied {
+                    generation: None, 
+                    value: None 
+                };
+
+                if other_generation != generation {
+                    diff = EntryDiff::<RigidBody>::Occupied {
+                        generation: Some(*other_generation), 
+                        value: None 
+                    };
+                };
+
+                if other_value != value {
+                    diff = EntryDiff::<RigidBody>::Occupied {
+                        generation: None, 
+                        value: Some(other_value.clone())
+                    };
+                };
+
+                if other_generation != generation && other_value != value {
+                    diff = EntryDiff::<RigidBody>::Occupied {
+                        generation: Some(*other_generation), 
+                        value: Some(other_value.clone())
+                    };
+                };
+
+                diff
+            },
+            _ => panic!("cant diff two different enum variants")
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+
+        match (self, diff) {
+            (Entry::Free { next_free }, EntryDiff::Free { next_free: next_free_diff }) => {
+                if let Some(next_free_new) = next_free_diff {
+                    *next_free = *next_free_new;
+                }
+            }
+
+            (Entry::Occupied { generation, value }, EntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
+                if let Some(generation_new) = generation_diff {
+                    *generation = *generation_new;
+                }
+
+                if let Some(value_new) = value_diff {
+                    *value = value_new.clone()
+                }
+            }
+
+            _ => panic!("cannot apply diff to two different variants")
+        }
+
+    }
+
+    fn identity() -> Self {
+        // this might cause issues
+        Self::Free { next_free: None }
+    }
+}
+
+
 
 /// An index (and generation) into an `Arena`.
 ///

@@ -17,7 +17,7 @@ use super::{RigidBodyActivationDiff, RigidBodyCcdDiff, RigidBodyChangesDiff, Rig
 /// A rigid body.
 ///
 /// To create a new rigid-body, use the [`RigidBodyBuilder`] structure.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RigidBody {
     pub(crate) pos: RigidBodyPosition,
     pub(crate) mprops: RigidBodyMassProps,
