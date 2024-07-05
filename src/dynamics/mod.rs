@@ -25,5 +25,5 @@ mod joint;
 mod rigid_body_components;
 mod solver;
 
-mod rigid_body;
+pub mod rigid_body;
 mod rigid_body_set;

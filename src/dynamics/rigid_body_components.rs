@@ -9,6 +9,7 @@ use crate::math::{
 use crate::parry::partitioning::IndexedData;
 use crate::utils::{SimdAngularInertia, SimdCross, SimdDot};
 use diff::Diff;
+use na::IsometryDiff;
 use num::Zero;
 
 /// The unique handle of a rigid body added to a `RigidBodySet`.
@@ -197,8 +198,8 @@ pub struct RigidBodyPosition {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct RigidBodyPositionDiff {
-    position: Option<Isometry<Real>>,
-    next_position: Option<Isometry<Real>>
+    position: Option<IsometryDiff>,
+    next_position: Option<IsometryDiff>
 }
 impl Diff for RigidBodyPosition {
     type Repr = RigidBodyPositionDiff;
@@ -211,11 +212,11 @@ impl Diff for RigidBodyPosition {
         };
 
         if other.position != self.position {
-            diff.position = Some(other.position);
+            diff.position = Some(self.position.diff(&other.position));
         }
 
         if other.next_position != self.next_position {
-            diff.next_position = Some(other.next_position);
+            diff.next_position = Some(self.position.diff(&other.position));
         }
 
         diff
@@ -223,12 +224,12 @@ impl Diff for RigidBodyPosition {
     }
 
     fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(position) = diff.position {
-            self.position = position;
+        if let Some(position_diff) = diff.position {
+            self.position.apply(&position_diff);
         }
 
-        if let Some(next_position) = diff.next_position {
-            self.next_position = next_position;
+        if let Some(next_position_diff) = diff.next_position {
+            self.next_position.apply(&next_position_diff);
         }
     }
 

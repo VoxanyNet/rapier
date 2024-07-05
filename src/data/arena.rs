@@ -12,6 +12,7 @@ use std::ops;
 use std::slice;
 use std::vec;
 
+use crate::prelude::rigid_body::RigidBodyDiff;
 use crate::prelude::RigidBody;
 
 /// The `Arena` allows inserting and removing elements that are referred to by
@@ -98,13 +99,13 @@ enum Entry<T> {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum EntryDiff<T> {
+pub enum RigidBodyEntryDiff {
     Free { next_free: Option<Option<u32>> },
-    Occupied { generation: Option<u32>, value: Option<T> },
+    Occupied { generation: Option<u32>, value: Option<RigidBodyDiff> },
 }
 
 impl Diff for Entry<RigidBody> {
-    type Repr = EntryDiff<RigidBody>;
+    type Repr = RigidBodyEntryDiff;
 
     fn diff(&self, other: &Entry<RigidBody>) -> Self::Repr {
 
@@ -112,12 +113,12 @@ impl Diff for Entry<RigidBody> {
         let diff = match (self, other) {
             (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
 
-                let mut diff = EntryDiff::<RigidBody>::Free {
+                let mut diff = RigidBodyEntryDiff::Free {
                     next_free: None
                 }; 
 
                 if other_next_free != next_free {
-                    diff = EntryDiff::<RigidBody>::Free {
+                    diff = RigidBodyEntryDiff::Free {
                         next_free: Some(*other_next_free)
                     };
                 };
@@ -128,29 +129,29 @@ impl Diff for Entry<RigidBody> {
             (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
 
                 // this can probably be optimized
-                let mut diff = EntryDiff::<RigidBody>::Occupied {
+                let mut diff = RigidBodyEntryDiff::Occupied {
                     generation: None, 
                     value: None 
                 };
 
                 if other_generation != generation {
-                    diff = EntryDiff::<RigidBody>::Occupied {
+                    diff = RigidBodyEntryDiff::Occupied {
                         generation: Some(*other_generation), 
                         value: None 
                     };
                 };
 
                 if other_value != value {
-                    diff = EntryDiff::<RigidBody>::Occupied {
+                    diff = RigidBodyEntryDiff::Occupied {
                         generation: None, 
-                        value: Some(other_value.clone())
+                        value: Some(value.diff(other_value))
                     };
                 };
 
                 if other_generation != generation && other_value != value {
-                    diff = EntryDiff::<RigidBody>::Occupied {
+                    diff = RigidBodyEntryDiff::Occupied {
                         generation: Some(*other_generation), 
-                        value: Some(other_value.clone())
+                        value: Some(value.diff(other_value))
                     };
                 };
 
@@ -165,19 +166,19 @@ impl Diff for Entry<RigidBody> {
     fn apply(&mut self, diff: &Self::Repr) {
 
         match (self, diff) {
-            (Entry::Free { next_free }, EntryDiff::Free { next_free: next_free_diff }) => {
+            (Entry::Free { next_free }, RigidBodyEntryDiff::Free { next_free: next_free_diff }) => {
                 if let Some(next_free_new) = next_free_diff {
                     *next_free = *next_free_new;
                 }
             }
 
-            (Entry::Occupied { generation, value }, EntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
+            (Entry::Occupied { generation, value }, RigidBodyEntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
                 if let Some(generation_new) = generation_diff {
                     *generation = *generation_new;
                 }
 
                 if let Some(value_new) = value_diff {
-                    *value = value_new.clone()
+                    value.apply(value_new);
                 }
             }
 
