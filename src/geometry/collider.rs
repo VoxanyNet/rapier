@@ -8,6 +8,7 @@ use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector, DIM};
 use crate::parry::transformation::vhacd::VHACDParameters;
 use crate::pipeline::{ActiveEvents, ActiveHooks};
 use crate::prelude::ColliderEnabled;
+use diff::Diff;
 use na::Unit;
 use parry::bounding_volume::{Aabb, BoundingVolume};
 use parry::shape::{Shape, TriMeshFlags};
@@ -16,7 +17,7 @@ use parry::shape::{Shape, TriMeshFlags};
 use crate::geometry::HeightFieldFlags;
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 /// A geometric entity that can be attached to a body so it can be affected by contacts and proximity queries.
 ///
 /// To build a new collider, use the [`ColliderBuilder`] structure.
@@ -35,6 +36,150 @@ pub struct Collider {
     /// User-defined data associated to this collider.
     pub user_data: u128,
 }
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct ColliderDiff {
+    coll_type: Option<ColliderType>,
+    shape: Option<ColliderShape>,
+    mprops: Option<ColliderMassProps>,
+    changes: Option<ColliderChanges>,
+    parent: Option<Option<ColliderParent>>,
+    pos: Option<ColliderPosition>,
+    material: Option<ColliderMaterial>,
+    flags: Option<ColliderFlags>,
+    bf_data: Option<ColliderBroadPhaseData>,
+    contact_skin: Option<Real>,
+    contact_force_event_threshold: Option<Real>,
+    user_data: Option<u128>,
+}
+
+impl Diff for Collider {
+
+    type Repr = ColliderDiff;
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = ColliderDiff {
+            coll_type: None,
+            shape: None,
+            mprops: None,
+            changes: None,
+            parent: None,
+            pos: None,
+            material: None,
+            flags: None,
+            bf_data: None,
+            contact_skin: None,
+            contact_force_event_threshold: None,
+            user_data: None,
+        };
+
+        if other.coll_type != self.coll_type {
+            diff.coll_type = Some(other.coll_type);
+        }
+
+        if other.shape != self.shape {
+            diff.shape = Some(other.shape.clone());
+        }
+
+        if other.mprops != self.mprops {
+            diff.mprops = Some(other.mprops.clone());
+        }
+
+        if other.changes != self.changes {
+            diff.changes = Some(other.changes)
+        }
+
+        if other.parent != self.parent {
+            diff.parent = Some(other.parent)
+        }
+
+        if other.pos != self.pos {
+            diff.pos = Some(other.pos)
+        }
+
+        if other.material != self.material {
+            diff.material = Some(other.material)
+        }
+
+        if other.flags != self.flags {
+            diff.flags = Some(other.flags)
+        }
+
+        if other.bf_data != self.bf_data {
+            diff.bf_data = Some(other.bf_data)
+        }
+
+        if other.contact_skin != self.contact_skin {
+            diff.contact_skin = Some(other.contact_skin)
+        }
+
+        if other.contact_force_event_threshold != self.contact_force_event_threshold {
+            diff.contact_force_event_threshold = Some(other.contact_force_event_threshold)
+        }
+
+        if other.user_data != self.user_data {
+            diff.user_data = Some(other.user_data)
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(coll_type) = &diff.coll_type {
+            self.coll_type = *coll_type
+        }
+
+        if let Some(shape) = &diff.shape {
+            self.shape = shape.clone()
+        }
+
+        if let Some(mprops) = &diff.mprops {
+            self.mprops = mprops.clone()
+        }
+
+        if let Some(changes) = &diff.changes {
+            self.changes = *changes
+        }
+
+        if let Some(parent) = &diff.parent {
+            self.parent = *parent
+        }
+
+        if let Some(pos) = &diff.pos {
+            self.pos = *pos
+        }
+
+        if let Some(material) = &diff.material {
+            self.material = *material
+        }
+
+        if let Some(flags) = &diff.flags {
+            self.flags = *flags
+        }
+
+        if let Some(bf_data) = &diff.bf_data {
+            self.bf_data = *bf_data
+        }
+
+        if let Some(contact_skin) = &diff.contact_skin {
+            self.contact_skin = *contact_skin
+        }
+
+        if let Some(contact_force_event_threshold) = &diff.contact_force_event_threshold {
+            self.contact_force_event_threshold = *contact_force_event_threshold
+        }
+
+        if let Some(user_data) = &diff.user_data {
+            self.user_data = *user_data
+        }
+        
+    }
+
+    fn identity() -> Self {
+        ColliderBuilder::ball(1.).build()
+    }
+}
+
+
 
 impl Collider {
     pub(crate) fn reset_internal_references(&mut self) {

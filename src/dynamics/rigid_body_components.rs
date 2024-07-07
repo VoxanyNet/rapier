@@ -71,9 +71,9 @@ impl IndexedData for RigidBodyHandle {
 pub type BodyStatus = RigidBodyType;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, diff::Diff)]
-#[diff(attr(
+#[cfg_attr(feature = "serde-serialize", diff(attr(
     #[derive(Serialize, Deserialize)]
-))]
+)))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 /// The status of a body, governing the way it is affected by external forces.
 pub enum RigidBodyType {
@@ -1358,9 +1358,9 @@ impl Diff for RigidBodyIds {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Default, Clone, Debug, PartialEq, Eq, diff::Diff)]
-#[diff(attr(
+#[cfg_attr(feature = "serde-serialize", diff(attr(
     #[derive(Serialize, Deserialize)]
-))]
+)))]
 /// The set of colliders attached to this rigid-bodies.
 ///
 /// This should not be modified manually unless you really know what

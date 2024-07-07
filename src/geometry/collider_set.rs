@@ -4,6 +4,10 @@ use crate::geometry::{Collider, ColliderChanges, ColliderHandle, ColliderParent}
 use crate::math::Isometry;
 use std::ops::{Index, IndexMut};
 
+#[derive(diff::Diff)]
+#[cfg_attr(feature = "serde-serialize", diff(attr(
+    #[derive(Serialize, Deserialize)]
+)))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default)]
 /// A set of colliders that can be handled by a physics `World`.

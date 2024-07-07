@@ -12,8 +12,9 @@ use std::ops;
 use std::slice;
 use std::vec;
 
+use crate::prelude::collider::ColliderDiff;
 use crate::prelude::rigid_body::RigidBodyDiff;
-use crate::prelude::RigidBody;
+use crate::prelude::{Collider, RigidBody};
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
@@ -29,7 +30,68 @@ pub struct Arena<T> {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub struct ArenaDiff {
+pub struct ColliderArenaDiff {
+    items: Option<VecDiff<Entry<Collider>>>,
+    generation: Option<u32>,
+    free_list_head: Option<Option<u32>>,
+    len: Option<usize>
+}
+
+impl Diff for Arena<Collider> {
+    type Repr = ColliderArenaDiff;
+    
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = ColliderArenaDiff {
+            items: None,
+            generation: None,
+            free_list_head: None,
+            len: None,
+        };
+
+        if other.items != self.items {
+            diff.items = Some(self.items.diff(&other.items));
+        };
+
+        if other.generation != self.generation {
+            diff.generation = Some(other.generation)
+        }
+
+        if other.free_list_head != self.free_list_head {
+            diff.free_list_head = Some(other.free_list_head)
+        }
+
+        if other.len != self.len {
+            diff.len = Some(other.len)
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(items) = &diff.items {
+            self.items.apply(items)
+        }
+
+        if let Some(generation) = &diff.generation {
+            self.generation = *generation
+        }
+
+        if let Some(free_list_head) = &diff.free_list_head {
+            self.free_list_head = *free_list_head
+        }
+
+        if let Some(len) = &diff.len {
+            self.len = *len
+        }
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
+}
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodyArenaDiff {
     items: Option<VecDiff<Entry<RigidBody>>>,
     generation: Option<u32>,
     free_list_head: Option<Option<u32>>,
@@ -37,10 +99,10 @@ pub struct ArenaDiff {
 }
 
 impl Diff for Arena<RigidBody> {
-    type Repr = ArenaDiff;
+    type Repr = RigidBodyArenaDiff;
 
     fn diff(&self, other: &Self) -> Self::Repr {
-        let mut diff = ArenaDiff {
+        let mut diff = RigidBodyArenaDiff {
             items: None,
             generation: None,
             free_list_head: None,
@@ -97,6 +159,100 @@ enum Entry<T> {
     Free { next_free: Option<u32> },
     Occupied { generation: u32, value: T },
 }
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub enum ColliderEntryDiff {
+    Free { next_free: Option<Option<u32>> },
+    Occupied { generation: Option<u32>, value: Option<ColliderDiff> },
+}
+
+impl Diff for Entry<Collider> {
+    type Repr = ColliderEntryDiff;
+
+    fn diff(&self, other: &Entry<Collider>) -> Self::Repr {
+
+        let diff = match (self, other) {
+            (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
+
+                let mut diff = ColliderEntryDiff::Free {
+                    next_free: None
+                }; 
+
+                if other_next_free != next_free {
+                    diff = ColliderEntryDiff::Free {
+                        next_free: Some(*other_next_free)
+                    };
+                };
+
+                diff
+
+            },
+            (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
+
+                // this can probably be optimized
+                let mut diff = ColliderEntryDiff::Occupied {
+                    generation: None, 
+                    value: None 
+                };
+
+                if other_generation != generation {
+                    diff = ColliderEntryDiff::Occupied {
+                        generation: Some(*other_generation), 
+                        value: None 
+                    };
+                };
+
+                if other_value != value {
+                    diff = ColliderEntryDiff::Occupied {
+                        generation: None, 
+                        value: Some(value.diff(other_value))
+                    };
+                };
+
+                if other_generation != generation && other_value != value {
+                    diff = ColliderEntryDiff::Occupied {
+                        generation: Some(*other_generation), 
+                        value: Some(value.diff(other_value))
+                    };
+                };
+
+                diff
+            },
+            _ => panic!("cant diff two different enum variants")
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+
+        match (self, diff) {
+            (Entry::Free { next_free }, ColliderEntryDiff::Free { next_free: next_free_diff }) => {
+                if let Some(next_free_new) = next_free_diff {
+                    *next_free = *next_free_new;
+                }
+            }
+
+            (Entry::Occupied { generation, value }, ColliderEntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
+                if let Some(generation_new) = generation_diff {
+                    *generation = *generation_new;
+                }
+
+                if let Some(value_new) = value_diff {
+                    value.apply(value_new);
+                }
+            }
+
+            _ => panic!("cannot apply diff to two different variants")
+        }
+
+    }
+
+    fn identity() -> Self {
+        // this might cause issues
+        Self::Free { next_free: None }
+    }
+}
+//// HERE 
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub enum RigidBodyEntryDiff {

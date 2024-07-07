@@ -25,9 +25,9 @@ impl BodyPair {
 }
 
 #[derive(diff::Diff)]
-#[diff(attr(
+#[cfg_attr(feature = "serde-serialize", diff(attr(
     #[derive(Serialize, Deserialize)]
-))]
+)))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug)]
 /// A set of rigid bodies that can be handled by a physics pipeline.

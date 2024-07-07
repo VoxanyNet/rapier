@@ -206,6 +206,6 @@ mod narrow_phase;
 
 mod broad_phase;
 mod broad_phase_qbvh;
-mod collider;
+pub mod collider;
 mod collider_set;
 mod mesh_converter;
