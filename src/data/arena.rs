@@ -217,7 +217,23 @@ impl Diff for Entry<Collider> {
 
                 diff
             },
-            _ => panic!("cant diff two different enum variants")
+            (Entry::Free { next_free }, Entry::Occupied { generation: other_generation, value: other_value }) => {
+                // the entry is changed from free to occupied
+
+                ColliderEntryDiff::Occupied {
+                    generation: Some(*other_generation), 
+                    value: Some(
+                        Collider::identity().diff(other_value) // because we aren't technically comparing this value to anything, we just want to make a new one
+                    ) 
+                }
+            },
+
+            (Entry::Occupied { generation, value }, Entry::Free { next_free: other_next_free }) => {
+                // the entry is changed from occupied to free
+
+                ColliderEntryDiff::Free { next_free: Some(*other_next_free) }
+                
+            }
         };
 
         diff
@@ -225,11 +241,15 @@ impl Diff for Entry<Collider> {
 
     fn apply(&mut self, diff: &Self::Repr) {
 
-        match (self, diff) {
+        // if we need to mutate 'self' itself, then we set this value, then update it after we are done matching
+        let mut updated_value: Option<Entry<Collider>> = None;
+
+        match (&mut *self, diff) {
             (Entry::Free { next_free }, ColliderEntryDiff::Free { next_free: next_free_diff }) => {
                 if let Some(next_free_new) = next_free_diff {
                     *next_free = *next_free_new;
                 }
+
             }
 
             (Entry::Occupied { generation, value }, ColliderEntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
@@ -240,9 +260,28 @@ impl Diff for Entry<Collider> {
                 if let Some(value_new) = value_diff {
                     value.apply(value_new);
                 }
-            }
+            },
 
-            _ => panic!("cannot apply diff to two different variants")
+            (Entry::Free { next_free }, ColliderEntryDiff::Occupied { generation: other_generation, value: other_value }) => {
+                // changing from free to occupied
+
+                // this is very weird
+                let mut generation = u32::identity();
+                generation.apply(&other_generation.expect("cannot diff an enum with dissimilar variants and not provide all fields"));
+
+                let mut value = Collider::identity();
+                value.apply(&other_value.as_ref().expect("cannot diff an enum with dissimilar variants and not provide all fields"));
+
+                *self = Entry::Occupied { generation, value };
+                
+            },
+            (Entry::Occupied { generation, value }, ColliderEntryDiff::Free { next_free: other_next_free }) => {
+                // changing from occupied to free
+
+                let next_free: Option<u32> = other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields"); 
+
+                *self = Entry::Free { next_free: next_free };
+            }
         }
 
     }
@@ -258,6 +297,7 @@ impl Diff for Entry<Collider> {
 pub enum RigidBodyEntryDiff {
     Free { next_free: Option<Option<u32>> },
     Occupied { generation: Option<u32>, value: Option<RigidBodyDiff> },
+    // add additional enum variant for no change?
 }
 
 impl Diff for Entry<RigidBody> {
@@ -313,7 +353,21 @@ impl Diff for Entry<RigidBody> {
 
                 diff
             },
-            _ => panic!("cant diff two different enum variants")
+            (Entry::Free { next_free }, Entry::Occupied { generation: other_generation, value: other_value }) => {
+                // the entry is changed from free to occupied
+
+                RigidBodyEntryDiff::Occupied { 
+                    generation: Some(*other_generation), 
+                    value: Some(
+                        RigidBody::identity().diff(other_value)
+                    ) 
+                }
+            },
+            (Entry::Occupied { generation, value }, Entry::Free { next_free: other_next_free }) => {
+                // the entry is changed from occupied to free
+
+                RigidBodyEntryDiff::Free { next_free: Some(*other_next_free) }
+            }
         };
 
         diff
@@ -321,7 +375,7 @@ impl Diff for Entry<RigidBody> {
 
     fn apply(&mut self, diff: &Self::Repr) {
 
-        match (self, diff) {
+        match (&mut *self, diff) {
             (Entry::Free { next_free }, RigidBodyEntryDiff::Free { next_free: next_free_diff }) => {
                 if let Some(next_free_new) = next_free_diff {
                     *next_free = *next_free_new;
@@ -338,7 +392,25 @@ impl Diff for Entry<RigidBody> {
                 }
             }
 
-            _ => panic!("cannot apply diff to two different variants")
+            (Entry::Free { next_free }, RigidBodyEntryDiff::Occupied { generation: other_generation, value: other_value }) => {
+                // changing from free to occupied
+
+                let mut generation = u32::identity();
+                generation.apply(&other_generation.expect("cannot diff an enum with dissimilar variants and not provide all fields"));
+                
+                let mut value = RigidBody::identity();
+                value.apply(&other_value.as_ref().expect("cannot diff an enum with dissimilar variants and not provide all fields"));
+
+                *self = Entry::Occupied { generation, value }
+            },
+
+            (Entry::Occupied { generation, value }, RigidBodyEntryDiff::Free { next_free: other_next_free }) => {
+                // changing from occupied to free
+
+                let next_free = other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields");
+
+                *self = Entry::Free { next_free: next_free };
+            }
         }
 
     }
