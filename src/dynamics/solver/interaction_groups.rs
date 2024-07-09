@@ -167,6 +167,7 @@ impl ParallelInteractionGroups {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct InteractionGroups {
     #[cfg(feature = "simd-is-enabled")]
     buckets: VecMap<([usize; SIMD_WIDTH], usize)>,

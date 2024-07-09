@@ -37,6 +37,7 @@ pub enum AnyConstraintMut<'a, Constraints: ConstraintTypes> {
     SimdTwoBodies(&'a mut Constraints::SimdTwoBodies),
 }
 
+#[derive(Clone)]
 pub(crate) struct SolverConstraintsSet<Constraints: ConstraintTypes> {
     pub generic_jacobians: DVector<Real>,
     pub two_body_interactions: Vec<usize>,

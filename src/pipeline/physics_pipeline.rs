@@ -28,6 +28,7 @@ use {crate::dynamics::RigidBodySet, crate::geometry::ColliderSet};
 /// - A velocity based solver based on PGS which computes forces for contact and joint constraints.
 /// - A position based solver based on non-linear PGS which performs constraint stabilization (i.e. correction of errors like penetrations).
 // NOTE: this contains only workspace data, so there is no point in making this serializable.
+#[derive(Clone)]
 pub struct PhysicsPipeline {
     /// Counters used for benchmarking only.
     pub counters: Counters,

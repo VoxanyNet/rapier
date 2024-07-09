@@ -11,6 +11,7 @@ use crate::prelude::RigidBodyVelocity;
 use crate::utils::SimdAngularInertia;
 use na::DVector;
 
+#[derive(Clone)]
 pub(crate) struct VelocitySolver {
     pub solver_bodies: Vec<SolverBody>,
     pub solver_vels: Vec<SolverVel<Real>>,

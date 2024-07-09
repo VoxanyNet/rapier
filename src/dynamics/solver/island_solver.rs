@@ -7,6 +7,7 @@ use crate::geometry::{ContactManifold, ContactManifoldIndex};
 use crate::prelude::MultibodyJointSet;
 use parry::math::Real;
 
+#[derive(Clone)]
 pub struct IslandSolver {
     contact_constraints: ContactConstraintsSet,
     joint_constraints: JointConstraintsSet,
