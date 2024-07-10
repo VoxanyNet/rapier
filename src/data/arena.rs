@@ -20,7 +20,7 @@ use crate::prelude::{Collider, RigidBody};
 /// `Index`.
 /// 
 /// [See the module-level documentation for example usage and motivation.](./index.html)
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct Arena<T> {
     items: Vec<Entry<T>>,

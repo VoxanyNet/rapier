@@ -29,7 +29,7 @@ impl BodyPair {
     #[derive(Serialize, Deserialize)]
 )))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq)]
 /// A set of rigid bodies that can be handled by a physics pipeline.
 pub struct RigidBodySet {
     // NOTE: the pub(crate) are needed by the broad phase
