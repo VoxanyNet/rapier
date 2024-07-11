@@ -1,4 +1,4 @@
-use diff::Diff;
+use diff::{Diff, VecDiff};
 
 use crate::dynamics::{
     ImpulseJointSet, MultibodyJointSet, RigidBodyActivation, RigidBodyChanges, RigidBodyColliders,
@@ -11,10 +11,7 @@ use crate::utils::SimdDot;
 /// Structure responsible for maintaining the set of active rigid-bodies, and
 /// putting non-moving rigid-bodies to sleep to save computation times.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Default, Diff, PartialEq)]
-#[cfg_attr(feature = "serde-serialize", diff(attr(
-    #[derive(Serialize, Deserialize)]
-)))]
+#[derive(Clone, Default, PartialEq)]
 pub struct IslandManager {
     pub(crate) active_dynamic_set: Vec<RigidBodyHandle>,
     pub(crate) active_kinematic_set: Vec<RigidBodyHandle>,
@@ -25,6 +22,77 @@ pub struct IslandManager {
     can_sleep: Vec<RigidBodyHandle>, // Workspace.
     #[cfg_attr(feature = "serde-serialize", serde(skip))]
     stack: Vec<RigidBodyHandle>, // Workspace.
+}
+
+pub struct IslandManagerDiff {
+    pub active_dynamic_set: Option<VecDiff<RigidBodyHandle>>,
+    pub active_kinematic_set: Option<VecDiff<RigidBodyHandle>>,
+    pub active_islands: Option<VecDiff<usize>>,
+    pub active_islands_additional_solver_iterations: Option<VecDiff<usize>>,
+    pub active_set_timestamp: Option<u32>
+}
+
+impl Diff for IslandManager {
+    type Repr = IslandManagerDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = IslandManagerDiff {
+            active_dynamic_set: None,
+            active_kinematic_set: None,
+            active_islands: None,
+            active_islands_additional_solver_iterations: None,
+            active_set_timestamp: None,
+        };
+
+        if other.active_dynamic_set != self.active_dynamic_set {
+            diff.active_dynamic_set = Some(self.active_dynamic_set.diff(&other.active_dynamic_set));
+        };
+
+        if other.active_kinematic_set != self.active_kinematic_set {
+            diff.active_kinematic_set = Some(self.active_kinematic_set.diff(&other.active_kinematic_set));
+        };
+
+        if other.active_islands != self.active_islands {
+            diff.active_islands = Some(self.active_islands.diff(&other.active_islands));
+        };
+
+        if other.active_islands_additional_solver_iterations != self.active_islands_additional_solver_iterations {
+            diff.active_islands_additional_solver_iterations = Some(self.active_islands_additional_solver_iterations.diff(&other.active_islands_additional_solver_iterations));
+        };
+
+        if other.active_set_timestamp != self.active_set_timestamp {
+            diff.active_set_timestamp = Some(other.active_set_timestamp);
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(active_dynamic_set_diff) = &diff.active_dynamic_set {
+            self.active_dynamic_set.apply(&active_dynamic_set_diff);
+        }
+
+        if let Some(active_kinematic_set_diff) = &diff.active_kinematic_set {
+            self.active_kinematic_set.apply(&active_kinematic_set_diff);
+        };
+
+        if let Some(active_islands_diff) = &diff.active_islands {
+            self.active_islands.apply(&active_islands_diff);
+        };
+
+        if let Some(active_islands_additional_solver_iterations) = &diff.active_islands_additional_solver_iterations {
+            self.active_islands_additional_solver_iterations.apply(&active_islands_additional_solver_iterations);
+        };
+
+        if let Some(active_set_timestamp_diff) = &diff.active_set_timestamp {
+            self.active_set_timestamp.apply(&active_set_timestamp_diff);
+        };
+    }
+
+    fn identity() -> Self {
+        IslandManager::default()
+    }
 }
 
 impl IslandManager {
