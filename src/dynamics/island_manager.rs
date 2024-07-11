@@ -12,6 +12,9 @@ use crate::utils::SimdDot;
 /// putting non-moving rigid-bodies to sleep to save computation times.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Diff)]
+#[cfg_attr(feature = "serde-serialize", diff(attr(
+    #[derive(Serialize, Deserialize)]
+)))]
 pub struct IslandManager {
     pub(crate) active_dynamic_set: Vec<RigidBodyHandle>,
     pub(crate) active_kinematic_set: Vec<RigidBodyHandle>,
