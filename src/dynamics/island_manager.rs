@@ -24,6 +24,7 @@ pub struct IslandManager {
     stack: Vec<RigidBodyHandle>, // Workspace.
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct IslandManagerDiff {
     pub active_dynamic_set: Option<VecDiff<RigidBodyHandle>>,
     pub active_kinematic_set: Option<VecDiff<RigidBodyHandle>>,
