@@ -11,7 +11,7 @@ use crate::utils::SimdDot;
 /// Structure responsible for maintaining the set of active rigid-bodies, and
 /// putting non-moving rigid-bodies to sleep to save computation times.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Default, Diff)]
+#[derive(Clone, Default, Diff, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", diff(attr(
     #[derive(Serialize, Deserialize)]
 )))]
