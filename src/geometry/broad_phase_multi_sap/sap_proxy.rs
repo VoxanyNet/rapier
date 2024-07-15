@@ -1,11 +1,12 @@
 use super::NEXT_FREE_SENTINEL;
 use crate::geometry::broad_phase_multi_sap::SAPRegion;
 use crate::geometry::{BroadPhaseProxyIndex, ColliderHandle};
+use diff::Diff;
 use parry::bounding_volume::Aabb;
 use std::ops::{Index, IndexMut};
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum SAPProxyData {
     Collider(ColliderHandle),
     Region(Option<Box<SAPRegion>>),
@@ -43,7 +44,7 @@ impl SAPProxyData {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SAPProxy {
     pub data: SAPProxyData,
     pub aabb: Aabb,
@@ -51,6 +52,78 @@ pub struct SAPProxy {
     // TODO: pack the layer_id and layer_depth into a single u16?
     pub layer_id: u8,
     pub layer_depth: i8,
+}
+
+pub struct SAPProxyDiff {
+    pub data: Option<SAPProxyData>,
+    pub aabb: Option<Aabb>,
+    pub next_free: BroadPhaseProxyIndex, // a u32 diff is just a u32
+    pub layer_id: u8,
+    pub layer_depth: i8
+}
+
+impl Diff for SAPProxy{
+
+    type Repr = SAPProxyDiff;
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = SAPProxyDiff {
+            data: None,
+            aabb: None,
+            next_free: u32::identity(),
+            layer_id: u8::identity(),
+            layer_depth: i8::identity(),
+        };
+
+        if other.data != self.data {
+            diff.data = Some(other.data.clone());
+        }
+
+        if other.aabb != self.aabb {
+            diff.aabb = Some(other.aabb)
+        }
+
+        if other.next_free != self.next_free {
+            diff.next_free = self.next_free.diff(&other.next_free);
+        }
+
+        if other.layer_id != self.layer_id {
+            diff.layer_id = self.layer_id.diff(&other.layer_id)
+        }
+
+        if other.layer_depth != self.layer_depth {
+            diff.layer_depth = self.layer_depth.diff(&other.layer_depth)
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(data) = &diff.data {
+            self.data = data.clone()
+        }
+
+        if let Some(aabb) = diff.aabb {
+            self.aabb = aabb
+        }
+
+        self.next_free.apply(&diff.next_free);
+
+        self.layer_id.apply(&diff.layer_id);
+
+        self.layer_depth.apply(&diff.layer_depth);
+    }
+
+    fn identity() -> Self {
+
+        // i have no idea if this is a good default
+        Self {
+            data: SAPProxyData::Collider(ColliderHandle::default()),
+            aabb: Aabb::new_invalid(),
+            next_free: u32::default(),
+            layer_id: u8::default(),
+            layer_depth: i8::default(),
+        }
+    }
 }
 
 impl SAPProxy {
@@ -76,7 +149,7 @@ impl SAPProxy {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, diff::Diff, PartialEq)]
 pub struct SAPProxies {
     pub elements: Vec<SAPProxy>,
     pub first_free: BroadPhaseProxyIndex,

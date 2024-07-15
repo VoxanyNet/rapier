@@ -8,7 +8,7 @@ use parry::utils::hashmap::HashMap;
 pub type SAPRegionPool = Vec<Box<SAPRegion>>;
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SAPRegion {
     pub axes: [SAPAxis; DIM],
     pub existing_proxies: BitVec,

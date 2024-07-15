@@ -2,11 +2,13 @@ use super::{SAPProxies, SAPProxy, SAPRegion, SAPRegionPool};
 use crate::geometry::broad_phase_multi_sap::DELETED_AABB_VALUE;
 use crate::geometry::{Aabb, BroadPhaseProxyIndex};
 use crate::math::{Point, Real};
+use diff::Diff;
 use parry::bounding_volume::BoundingVolume;
 use parry::utils::hashmap::{Entry, HashMap};
+use rustc_hash::FxHashSet;
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct SAPLayer {
     pub depth: i8,
     pub layer_id: u8,
@@ -18,6 +20,140 @@ pub(crate) struct SAPLayer {
     regions_to_potentially_remove: Vec<Point<i32>>, // Workspace
     #[cfg_attr(feature = "serde-serialize", serde(skip))]
     pub created_regions: Vec<BroadPhaseProxyIndex>,
+}
+
+// this is really fucking stupid
+pub struct RegionsDiff {             // we dont use Option<BroadPhaseIndex> because for some reason a u32 diff is just a u32
+    pub altered: HashMap<Point<i32>, BroadPhaseProxyIndex>,
+    pub removed: FxHashSet<Point<i32>>,
+    pub new: HashMap<Point<i32>, BroadPhaseProxyIndex>
+}
+
+pub struct SAPLayerDiff {
+    pub depth: i8,
+    pub layer_id: u8,
+    pub smaller_layer: Option<Option<u8>>,
+    pub larger_layer: Option<Option<u8>>,
+    pub region_width: Option<Real>,
+    pub regions: RegionsDiff,
+    // we skip the last two fields because they skip it with serde so i dont think it matters
+}
+impl Diff for SAPLayer {
+    type Repr = SAPLayerDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = SAPLayerDiff {
+            depth: i8::default(),
+            layer_id: u8::default(),
+            smaller_layer: None,
+            larger_layer: None,
+            region_width: None,
+            regions: RegionsDiff {
+                altered: HashMap::default(),
+                removed: FxHashSet::default(),
+                new: HashMap::default()
+            },
+        };
+
+        if other.depth != self.depth {
+            diff.depth = self.depth.diff(&other.depth)
+        }
+
+        if other.layer_id != self.layer_id {
+            diff.layer_id = self.layer_id.diff(&other.layer_id)
+        }
+
+        if other.smaller_layer != self.smaller_layer {
+            diff.smaller_layer = Some(other.smaller_layer)
+        }
+
+        if other.larger_layer != self.larger_layer {
+            diff.larger_layer = Some(other.larger_layer)
+        }
+
+        if other.region_width != self.region_width {
+            diff.region_width = Some(other.region_width)
+        }
+
+        // ordinarily we would implement the diff on the hashmap itself but i dont feel like doing that
+        if other.regions != self.regions {
+
+            for (key, value) in &self.regions {
+
+                // first we try to get this element in other
+                let other_value = other.regions.get(key);
+                
+                match other_value {
+                    
+                    // if other contains the element, we diff the elememt
+                    Some(other_value) => {
+                        diff.regions.altered.insert(*key, value.diff(other_value));
+                    },
+                    // if its not in other.regions, we add it to the removed keys
+                    None => {
+                        diff.regions.removed.insert(*key);
+                    },
+                }
+            }
+
+            // now we check for any new elements in other.regions
+            for (other_key, other_value) in &other.regions {
+
+                let value = self.regions.get(other_key);
+
+                match value {               
+                    Some(_value) => {}, // dont do anything
+                    None => {
+                        // if its not in self.regions, that means that its new
+                        diff.regions.new.insert(*other_key, *other_value);
+                    },
+                }
+            }
+        }
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        
+        // technically there is always a depth diff
+        self.depth.apply(&diff.depth);
+
+        self.layer_id.apply(&diff.layer_id);
+
+        if let Some(smaller_layer) = diff.smaller_layer {
+            self.smaller_layer = smaller_layer
+        }
+
+        if let Some(larger_layer) = diff.larger_layer {
+            self.larger_layer = larger_layer
+        }
+
+        if let Some(region_width) = diff.region_width {
+            self.region_width = region_width
+        }
+
+        for key in &diff.regions.removed {
+            self.regions.remove(key);
+        };
+
+        for (key, value) in &diff.regions.new {
+            self.regions.insert(*key, *value);
+        }
+
+        for (key, updated_value) in &diff.regions.altered {
+            let value = self.regions.get_mut(key);
+
+            match value {
+                Some(value) => *value = *updated_value,
+                None => panic!("cannot update non existing key"),
+            }
+        }
+    }
+
+    fn identity() -> Self {
+        Self::new(0, 0, None, None)
+    }
 }
 
 impl SAPLayer {

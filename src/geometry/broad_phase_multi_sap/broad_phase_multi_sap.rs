@@ -1,5 +1,5 @@
 use super::{
-    BroadPhasePairEvent, ColliderPair, SAPLayer, SAPProxies, SAPProxy, SAPProxyData, SAPRegionPool,
+    BroadPhasePairEvent, ColliderPair, SAPLayer, SAPProxies, SAPProxiesDiff, SAPProxy, SAPProxyData, SAPRegionPool
 };
 use crate::geometry::{
     BroadPhaseProxyIndex, Collider, ColliderBroadPhaseData, ColliderChanges, ColliderHandle,
@@ -8,6 +8,7 @@ use crate::geometry::{
 use crate::math::{Isometry, Real};
 use crate::prelude::{BroadPhase, RigidBodySet};
 use crate::utils::IndexMut2;
+use diff::{Diff, VecDiff};
 use parry::bounding_volume::BoundingVolume;
 use parry::utils::hashmap::HashMap;
 
@@ -112,6 +113,62 @@ pub struct BroadPhaseMultiSap {
         )
     )]
     reporting: HashMap<(u32, u32), bool>, // Workspace
+}
+
+pub struct BroadPhaseMultiSapDiff {
+    pub proxies: Option<SAPProxiesDiff>,
+    pub layers: Option<VecDiff<SAPLayer>>,
+    pub smallest_layer: u8,
+    pub largest_layer: u8
+}
+
+impl Diff for BroadPhaseMultiSap {
+    type Repr = BroadPhaseMultiSapDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+        let mut diff = BroadPhaseMultiSapDiff {
+            proxies: None,
+            layers: None,
+            smallest_layer: u8::default(),
+            largest_layer: u8::default(),
+        };
+
+        if other.proxies != self.proxies {
+            diff.proxies = Some(self.proxies.diff(&other.proxies))
+        }
+
+        if other.layers != self.layers {
+            diff.layers = Some(self.layers.diff(&other.layers))
+        }
+
+        if other.smallest_layer != self.smallest_layer {
+            diff.smallest_layer = self.smallest_layer.diff(&other.smallest_layer)
+        }
+
+        if other.largest_layer != self.largest_layer {
+            diff.largest_layer = self.largest_layer.diff(&other.largest_layer)
+        }
+        
+        diff
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(proxies_diff) = &diff.proxies {
+            self.proxies.apply(proxies_diff)
+        }
+
+        if let Some(layers_diff) = &diff.layers {
+            self.layers.apply(layers_diff)
+        }
+
+        self.smallest_layer.apply(&diff.smallest_layer);
+
+        self.largest_layer.apply(&diff.largest_layer);
+    }
+
+    fn identity() -> Self {
+        Self::default()
+    }
 }
 
 impl Default for BroadPhaseMultiSap {

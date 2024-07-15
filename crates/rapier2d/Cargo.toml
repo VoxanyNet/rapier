@@ -51,8 +51,8 @@ required-features = ["dim2", "f32"]
 vec_map = { version = "0.8", optional = true }
 instant = { version = "0.1", features = ["now"], optional = true }
 num-traits = "0.2"
-nalgebra = {git = "https://github.com/VoxanyNet/nalgebra"}
-parry2d = {git = "https://github.com/VoxanyNet/parry"}
+nalgebra = {git = "https://github.com/VoxanyNet/nalgebra", rev = "e418ac27d31977ed36ee95f56d7ca18a490e0b33"}
+parry2d = {git = "https://github.com/VoxanyNet/parry", rev = "0bb5fa137d4a6e8ce0a04d2728e4411074fa1c14"}
 simba = "0.9"
 approx = "0.5"
 rayon = { version = "1", optional = true }

@@ -8,7 +8,7 @@ use parry::utils::hashmap::HashMap;
 use std::cmp::Ordering;
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SAPAxis {
     pub min_bound: Real,
     pub max_bound: Real,
