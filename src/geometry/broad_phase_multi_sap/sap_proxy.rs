@@ -54,6 +54,8 @@ pub struct SAPProxy {
     pub layer_depth: i8,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+#[derive(Clone)]
 pub struct SAPProxyDiff {
     pub data: Option<SAPProxyData>,
     pub aabb: Option<Aabb>,
@@ -150,6 +152,10 @@ impl SAPProxy {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, diff::Diff, PartialEq)]
+#[diff(attr(
+    #[derive(Clone)]
+    #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+))]
 pub struct SAPProxies {
     pub elements: Vec<SAPProxy>,
     pub first_free: BroadPhaseProxyIndex,

@@ -115,6 +115,8 @@ pub struct BroadPhaseMultiSap {
     reporting: HashMap<(u32, u32), bool>, // Workspace
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+#[derive(Clone)]
 pub struct BroadPhaseMultiSapDiff {
     pub proxies: Option<SAPProxiesDiff>,
     pub layers: Option<VecDiff<SAPLayer>>,
