@@ -24,7 +24,7 @@ pub(crate) struct SAPLayer {
 
 // this is really fucking stupid
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RegionsDiff {             // we dont use Option<BroadPhaseIndex> because for some reason a u32 diff is just a u32
     pub altered: HashMap<Point<i32>, BroadPhaseProxyIndex>,
     pub removed: FxHashSet<Point<i32>>,
@@ -32,7 +32,7 @@ pub struct RegionsDiff {             // we dont use Option<BroadPhaseIndex> beca
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct SAPLayerDiff {
     pub depth: i8,
     pub layer_id: u8,

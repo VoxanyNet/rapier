@@ -74,7 +74,7 @@ use parry::utils::hashmap::HashMap;
 /// - A set of `SAPProxy` are maintained separately. It contains the Aabbs of all the colliders managed by this
 ///   broad-phase, as well as the Aabbs of all the regions part of this broad-phase.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct BroadPhaseMultiSap {
     proxies: SAPProxies,
     layers: Vec<SAPLayer>,
@@ -116,7 +116,7 @@ pub struct BroadPhaseMultiSap {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct BroadPhaseMultiSapDiff {
     pub proxies: Option<SAPProxiesDiff>,
     pub layers: Option<VecDiff<SAPLayer>>,
