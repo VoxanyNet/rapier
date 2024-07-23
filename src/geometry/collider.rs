@@ -41,14 +41,14 @@ pub struct Collider {
 pub struct ColliderDiff {
     coll_type: Option<ColliderType>,
     shape: Option<ColliderShape>,
-    mprops: Option<ColliderMassProps>,
-    changes: Option<ColliderChanges>,
+    //mprops: Option<ColliderMassProps>,
+    //changes: Option<ColliderChanges>,
     parent: Option<Option<ColliderParent>>,
     pos: Option<ColliderPosition>,
     material: Option<ColliderMaterial>,
-    flags: Option<ColliderFlags>,
-    bf_data: Option<ColliderBroadPhaseData>,
-    contact_skin: Option<Real>,
+    //flags: Option<ColliderFlags>,
+    //bf_data: Option<ColliderBroadPhaseData>,
+    //contact_skin: Option<Real>,
     contact_force_event_threshold: Option<Real>,
     user_data: Option<u128>,
 }
@@ -60,14 +60,14 @@ impl Diff for Collider {
         let mut diff = ColliderDiff {
             coll_type: None,
             shape: None,
-            mprops: None,
-            changes: None,
+            //mprops: None,
+            //changes: None,
             parent: None,
             pos: None,
             material: None,
-            flags: None,
-            bf_data: None,
-            contact_skin: None,
+            //flags: None,
+            //bf_data: None,
+            //contact_skin: None,
             contact_force_event_threshold: None,
             user_data: None,
         };
@@ -80,13 +80,13 @@ impl Diff for Collider {
             diff.shape = Some(other.shape.clone());
         }
 
-        if other.mprops != self.mprops {
-            diff.mprops = Some(other.mprops.clone());
-        }
+        // if other.mprops != self.mprops {
+        //     diff.mprops = Some(other.mprops.clone());
+        // }
 
-        if other.changes != self.changes {
-            diff.changes = Some(other.changes)
-        }
+        // if other.changes != self.changes {
+        //     diff.changes = Some(other.changes)
+        // }
 
         if other.parent != self.parent {
             diff.parent = Some(other.parent)
@@ -100,17 +100,17 @@ impl Diff for Collider {
             diff.material = Some(other.material)
         }
 
-        if other.flags != self.flags {
-            diff.flags = Some(other.flags)
-        }
+        // if other.flags != self.flags {
+        //     diff.flags = Some(other.flags)
+        // }
 
-        if other.bf_data != self.bf_data {
-            diff.bf_data = Some(other.bf_data)
-        }
+        // if other.bf_data != self.bf_data {
+        //     diff.bf_data = Some(other.bf_data)
+        // }
 
-        if other.contact_skin != self.contact_skin {
-            diff.contact_skin = Some(other.contact_skin)
-        }
+        // if other.contact_skin != self.contact_skin {
+        //     diff.contact_skin = Some(other.contact_skin)
+        // }
 
         if other.contact_force_event_threshold != self.contact_force_event_threshold {
             diff.contact_force_event_threshold = Some(other.contact_force_event_threshold)
@@ -132,13 +132,13 @@ impl Diff for Collider {
             self.shape = shape.clone()
         }
 
-        if let Some(mprops) = &diff.mprops {
-            self.mprops = mprops.clone()
-        }
+        // if let Some(mprops) = &diff.mprops {
+        //     self.mprops = mprops.clone()
+        // }
 
-        if let Some(changes) = &diff.changes {
-            self.changes = *changes
-        }
+        // if let Some(changes) = &diff.changes {
+        //     self.changes = *changes
+        // }
 
         if let Some(parent) = &diff.parent {
             self.parent = *parent
@@ -152,17 +152,17 @@ impl Diff for Collider {
             self.material = *material
         }
 
-        if let Some(flags) = &diff.flags {
-            self.flags = *flags
-        }
+        // if let Some(flags) = &diff.flags {
+        //     self.flags = *flags
+        // }
 
-        if let Some(bf_data) = &diff.bf_data {
-            self.bf_data = *bf_data
-        }
+        // if let Some(bf_data) = &diff.bf_data {
+        //     self.bf_data = *bf_data
+        // }
 
-        if let Some(contact_skin) = &diff.contact_skin {
-            self.contact_skin = *contact_skin
-        }
+        // if let Some(contact_skin) = &diff.contact_skin {
+        //     self.contact_skin = *contact_skin
+        // }
 
         if let Some(contact_force_event_threshold) = &diff.contact_force_event_threshold {
             self.contact_force_event_threshold = *contact_force_event_threshold
