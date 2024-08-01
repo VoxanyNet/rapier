@@ -129,6 +129,7 @@ impl Diff for Collider {
         }
 
         if let Some(shape) = &diff.shape {
+            println!("shape change");
             self.shape = shape.clone()
         }
 
