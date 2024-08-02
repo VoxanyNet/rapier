@@ -77,7 +77,6 @@ impl Diff for Collider {
         }
 
         if other.shape != self.shape {
-            println!("shape change");
             diff.shape = Some(other.shape.clone());
         }
 
