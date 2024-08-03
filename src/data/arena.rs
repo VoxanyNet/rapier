@@ -483,7 +483,7 @@ impl Diff for Index {
     }
 
     fn identity() -> Self {
-        Index { index: 0, generation: 0 }
+        Index { index: u32::identity(), generation: u32::identity() }
     }
 }
 
