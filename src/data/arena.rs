@@ -466,7 +466,7 @@ impl Diff for Index {
         };
 
         if other.generation != self.generation {
-            diff.generation = Some(other.index);
+            diff.generation = Some(other.generation);
         };
 
         diff
