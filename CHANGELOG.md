@@ -1,3 +1,37 @@
+## Unreleased
+
+### Fix
+
+- The region key has been replaced by an i64 in the f64 version of rapier, increasing the range before panics occur.
+- Fix `BroadphaseMultiSap` not being able to serialize correctly with serde_json.
+
+### Modified
+
+- `InteractionGroups` default value for `memberships` is now `GROUP_1` (#706)
+
+## v0.22.0 (20 July 2024)
+
+### Fix
+
+- Fix crash when removing a multibody joint, or a rigid-body with a multipody-joint attached to it.
+- Fix crash when inserting multibody joints in an arbitrary order (instead of incrementally from root to leaf).
+- Fix `BroadphaseMultiSap` not being able to serialize a field with serde_json.
+
+### Added
+
+- Implement rotation gizmo for Ball 2D shape (as radius line) in Debug renderer if `DebugRenderMode::COLLIDER_SHAPES`
+  enabled
+- Implement `Debug` for `ColliderSet`, `InteractionGraph`,
+  `MultibodyLink`, `MultibodyJointSet`, `Multibody`, `ImpulseJointSet`
+
+### Modified
+
+- Update parry to v0.17. Refer to [its changelog](https://github.com/dimforge/parry/blob/master/CHANGELOG.md#v0170) for
+  further details.
+- Divided by two the value of each `QueryFilterFlags` variant so that
+  the smallest one is 1 instead of 2 (fixes a bug in rapier.js).
+- `BroadphaseMultiSap` now serializes its `colliders_proxy_ids` as `Vec[(ColliderHandle, BroadPhaseProxyIndex)]`.
+
 ## v0.21.0 (23 June 2024)
 
 ### Fix
@@ -63,7 +97,7 @@ This release introduces two new crates:
 - Rename `JointAxis::X/Y/Z` to `::LinX/LinY/LinZ` to avoid confusing it with `::AngX/AngY/AngZ`.
 - Rename `JointAxesMask::X/Y/Z` to `::LIN_X/LIN_Y/LIN_Z` to avoid confusing it with `::ANG_X/ANG_Y/ANG_Z`.
 - The function `RigidBody::add_collider` is now private. It was only public because it was needed for some internal
-  `bevy_rapier` plumbings, but it is no longer useful. Adding a collider must always go througthe `ColliderSet`.
+  `bevy_rapier` plumbings, but it is no longer useful. Adding a collider must always go through the `ColliderSet`.
 - `CharacterController::solve_character_collision_impulses` now takes multiple `CharacterCollision` as parameter:
   this change will allow further internal optimizations.
 - `QueryPipeline::update` now doesn't need the `RigidBodySet` as parameter.

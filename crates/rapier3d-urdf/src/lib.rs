@@ -15,7 +15,7 @@
 //! these elements are very welcome!
 //!
 //! - Mesh file types other than `stl` are not supported yet. Contributions are welcome. You my check the `rapier3d-stl`
-//! repository for an example of mesh loader.
+//!   repository for an example of mesh loader.
 //! - When inserting joints as multibody joints, they will be reset to their neutral position (all coordinates = 0).
 //! - The following fields are currently ignored:
 //!     - `Joint::dynamics`
@@ -42,6 +42,9 @@ use rapier3d::{
 use std::collections::HashMap;
 use std::path::Path;
 use xurdf::{Geometry, Inertial, Joint, Pose, Robot};
+
+#[cfg(doc)]
+use rapier3d::dynamics::Multibody;
 
 bitflags::bitflags! {
     /// Options applied to multibody joints created from the URDF joints.
@@ -79,7 +82,7 @@ pub struct UrdfLoaderOptions {
     /// So if this option is set to `true`, it is recommended to also keep
     /// [`UrdfLoaderOptions::enable_joint_collisions`] set to `false`. If the model is then added
     /// to the physics sets using multibody joints, it is recommended to call
-    /// [`UrdfRobot::insert_with_multibody_joints`] with the [`UrdfMultibodyOptions::DISABLE_SELF_CONTACTS`]
+    /// [`UrdfRobot::insert_using_multibody_joints`] with the [`UrdfMultibodyOptions::DISABLE_SELF_CONTACTS`]
     /// flag enabled.
     pub create_colliders_from_visual_shapes: bool,
     /// If `true`, the mass properties (center-of-mass, mass, and angular inertia) read from the urdf

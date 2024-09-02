@@ -71,13 +71,14 @@ impl InteractionGroups {
 
 impl Default for InteractionGroups {
     fn default() -> Self {
-        Self::all()
+        Self {
+            memberships: Group::GROUP_1,
+            filter: Group::ALL,
+        }
     }
 }
 
-use bitflags::bitflags;
-
-bitflags! {
+bitflags::bitflags! {
     /// A bit mask identifying groups for interaction.
     #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
     #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

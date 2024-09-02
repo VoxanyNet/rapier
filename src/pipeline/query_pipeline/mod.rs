@@ -47,15 +47,15 @@ bitflags::bitflags! {
     /// Flags for excluding whole sets of colliders from a scene query.
     pub struct QueryFilterFlags: u32 {
         /// Exclude from the query any collider attached to a fixed rigid-body and colliders with no rigid-body attached.
-        const EXCLUDE_FIXED = 1 << 1;
+        const EXCLUDE_FIXED = 1 << 0;
         /// Exclude from the query any collider attached to a kinematic rigid-body.
-        const EXCLUDE_KINEMATIC = 1 << 2;
+        const EXCLUDE_KINEMATIC = 1 << 1;
         /// Exclude from the query any collider attached to a dynamic rigid-body.
-        const EXCLUDE_DYNAMIC = 1 << 3;
+        const EXCLUDE_DYNAMIC = 1 << 2;
         /// Exclude from the query any collider that is a sensor.
-        const EXCLUDE_SENSORS = 1 << 4;
+        const EXCLUDE_SENSORS = 1 << 3;
         /// Exclude from the query any collider that is not a sensor.
-        const EXCLUDE_SOLIDS = 1 << 5;
+        const EXCLUDE_SOLIDS = 1 << 4;
         /// Excludes all colliders not attached to a dynamic rigid-body.
         const ONLY_DYNAMIC = Self::EXCLUDE_FIXED.bits() | Self::EXCLUDE_KINEMATIC.bits();
         /// Excludes all colliders not attached to a kinematic rigid-body.
@@ -357,7 +357,7 @@ impl QueryPipeline {
         self.qbvh.clear_and_rebuild(mode, self.dilation_factor);
     }
 
-    /// Find the closest intersection between a ray and a set of collider.
+    /// Find the closest intersection between a ray and a set of colliders.
     ///
     /// # Parameters
     /// * `colliders` - The set of colliders taking part in this pipeline.
@@ -384,7 +384,7 @@ impl QueryPipeline {
         self.qbvh.traverse_best_first(&mut visitor).map(|h| h.1)
     }
 
-    /// Find the closest intersection between a ray and a set of collider.
+    /// Find the closest intersection between a ray and a set of colliders.
     ///
     /// # Parameters
     /// * `colliders` - The set of colliders taking part in this pipeline.
@@ -415,7 +415,7 @@ impl QueryPipeline {
         self.qbvh.traverse_best_first(&mut visitor).map(|h| h.1)
     }
 
-    /// Find the all intersections between a ray and a set of collider and passes them to a callback.
+    /// Find the all intersections between a ray and a set of colliders and passes them to a callback.
     ///
     /// # Parameters
     /// * `colliders` - The set of colliders taking part in this pipeline.
@@ -577,7 +577,7 @@ impl QueryPipeline {
             .map(|h| (h.1 .1 .0, h.1 .0, h.1 .1 .1))
     }
 
-    /// Finds all handles of all the colliders with an Aabb intersecting the given Aabb.
+    /// Finds all handles of all the colliders with an [`Aabb`] intersecting the given [`Aabb`].
     pub fn colliders_with_aabb_intersecting_aabb(
         &self,
         aabb: &Aabb,

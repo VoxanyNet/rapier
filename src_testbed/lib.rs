@@ -1,14 +1,5 @@
 #![allow(clippy::too_many_arguments)]
-#![allow(unexpected_cfgs)] // This happens due to the dim2/dim3/f32/f64 cfg.
-
 extern crate nalgebra as na;
-
-#[macro_use]
-extern crate bitflags;
-
-#[cfg(feature = "log")]
-#[macro_use]
-extern crate log;
 
 pub use crate::graphics::{BevyMaterial, GraphicsManager};
 pub use crate::harness::plugin::HarnessPlugin;

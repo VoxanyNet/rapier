@@ -9,7 +9,7 @@ pub type TemporaryInteractionIndex = EdgeIndex;
 
 /// A graph where nodes are collision objects and edges are contact or proximity algorithms.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InteractionGraph<N, E> {
     pub(crate) graph: Graph<N, E>,
 }
@@ -66,7 +66,7 @@ impl<N: Copy, E> InteractionGraph<N, E> {
     /// a map between `CollisionObjectSlabHandle` and `ColliderGraphIndex`, then you should update this
     /// map to associate `id` to the handle returned by this method. For example:
     ///
-    /// ```.ignore
+    /// ```ignore
     /// // Let `id` be the graph index of the collision object we want to remove.
     /// if let Some(other_handle) = graph.remove_node(id) {
     ///    // The graph index of `other_handle` changed to `id` due to the removal.

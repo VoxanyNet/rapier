@@ -512,7 +512,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac,
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs,
@@ -626,7 +626,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac,
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff: motor_params.cfm_coeff,
             cfm_gain: motor_params.cfm_gain,
             rhs: rhs_wo_bias,
@@ -673,7 +673,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac,
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -732,7 +732,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac: na::zero(),
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -782,7 +782,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac: na::zero(),
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff: motor_params.cfm_coeff,
             cfm_gain: motor_params.cfm_gain,
             rhs: rhs_wo_bias,
@@ -827,7 +827,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             lin_jac: na::zero(),
             ang_jac1,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -927,7 +927,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds,
             lin_jac,
             ang_jac2,
-            inv_lhs: zero, // Will be set during ortogonalization.
+            inv_lhs: zero, // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -994,7 +994,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds,
             lin_jac,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs,
@@ -1049,7 +1049,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds: [-motor_params.max_impulse, motor_params.max_impulse],
             lin_jac,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff: motor_params.cfm_coeff,
             cfm_gain: motor_params.cfm_gain,
             rhs: rhs_wo_bias,
@@ -1122,7 +1122,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds: [-motor_params.max_impulse, motor_params.max_impulse],
             lin_jac,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff: motor_params.cfm_coeff,
             cfm_gain: motor_params.cfm_gain,
             rhs: rhs_wo_bias,
@@ -1163,7 +1163,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds: [-N::splat(Real::MAX), N::splat(Real::MAX)],
             lin_jac,
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -1210,7 +1210,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds: [-motor_params.max_impulse, motor_params.max_impulse],
             lin_jac: na::zero(),
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff: motor_params.cfm_coeff,
             cfm_gain: motor_params.cfm_gain,
             rhs: rhs_wo_bias,
@@ -1266,7 +1266,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds,
             lin_jac: na::zero(),
             ang_jac2,
-            inv_lhs: zero, // Will be set during ortogonalization.
+            inv_lhs: zero, // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -1308,7 +1308,7 @@ impl<N: SimdRealCopy> JointTwoBodyConstraintHelper<N> {
             impulse_bounds: [-N::splat(Real::MAX), N::splat(Real::MAX)],
             lin_jac: na::zero(),
             ang_jac2,
-            inv_lhs: N::zero(), // Will be set during ortogonalization.
+            inv_lhs: N::zero(), // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: N::zero(),
             rhs: rhs_wo_bias + rhs_bias,
@@ -1417,7 +1417,7 @@ impl JointTwoBodyConstraintHelper<Real> {
             lin_jac: na::zero(),
             ang_jac1,
             ang_jac2,
-            inv_lhs: 0.0, // Will be set during ortogonalization.
+            inv_lhs: 0.0, // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: 0.0,
             rhs: rhs_wo_bias + rhs_bias,
@@ -1474,7 +1474,7 @@ impl JointTwoBodyConstraintHelper<Real> {
             impulse_bounds,
             lin_jac: na::zero(),
             ang_jac2,
-            inv_lhs: 0.0, // Will be set during ortogonalization.
+            inv_lhs: 0.0, // Will be set during orthogonalization.
             cfm_coeff,
             cfm_gain: 0.0,
             rhs: rhs_wo_bias + rhs_bias,

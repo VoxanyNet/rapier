@@ -13,6 +13,9 @@ use na::{
     StorageMut, LU,
 };
 
+#[cfg(doc)]
+use crate::prelude::{GenericJoint, RigidBody};
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 struct Force {
@@ -59,7 +62,7 @@ fn concat_rb_mass_matrix(
 
 /// An articulated body simulated using the reduced-coordinates approach.
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Multibody {
     // TODO: serialization: skip the workspace fields.
     pub(crate) links: MultibodyLinkVec,
@@ -145,6 +148,7 @@ impl Multibody {
         let mut link2mb = vec![usize::MAX; self.links.len()];
         let mut link_id2new_id = vec![usize::MAX; self.links.len()];
 
+        // Split multibody and update the set of links and ndofs.
         for (i, mut link) in self.links.0.into_iter().enumerate() {
             let is_new_root = i == 0
                 || !joint_only && link.parent_internal_id == to_remove
@@ -192,7 +196,14 @@ impl Multibody {
 
                 link.internal_id = i;
                 link.assembly_id = assembly_id;
-                link.parent_internal_id = link_id2new_id[link.parent_internal_id];
+
+                // NOTE: for the root, the current`link.parent_internal_id` is invalid since that
+                //       parent lies in a different multibody now.
+                link.parent_internal_id = if i != 0 {
+                    link_id2new_id[link.parent_internal_id]
+                } else {
+                    0
+                };
                 assembly_id += link_ndofs;
             }
         }
@@ -202,7 +213,10 @@ impl Multibody {
 
     pub(crate) fn append(&mut self, mut rhs: Multibody, parent: usize, joint: MultibodyJoint) {
         let rhs_root_ndofs = rhs.links[0].joint.ndofs();
-        let rhs_copy_shift = self.ndofs + rhs_root_ndofs;
+        // Values for rhs will be copied into the buffers of `self` starting at this index.
+        let rhs_copy_shift = self.ndofs + joint.ndofs();
+        // Number of dofs to copy from rhs. The root’s dofs isn’t included because it will be
+        // replaced by `joint.
         let rhs_copy_ndofs = rhs.ndofs - rhs_root_ndofs;
 
         // Adjust the ids of all the rhs links except the first one.
@@ -224,7 +238,7 @@ impl Multibody {
             rhs.links[0].parent_internal_id = parent;
         }
 
-        // Grow buffers and append data from rhs.
+        // Grow buffers then append data from rhs.
         self.grow_buffers(rhs_copy_ndofs + rhs.links[0].joint.ndofs(), rhs.links.len());
 
         if rhs_copy_ndofs > 0 {
@@ -850,8 +864,7 @@ impl Multibody {
     /// Apply displacements, in generalized coordinates, to this multibody.
     ///
     /// Note this does **not** updates the link poses, only their generalized coordinates.
-    /// To update the link poses and associated rigid-bodies, call [`Self::forward_kinematics`]
-    /// or [`Self::finalize`].
+    /// To update the link poses and associated rigid-bodies, call [`Self::forward_kinematics`].
     pub fn apply_displacements(&mut self, disp: &[Real]) {
         for link in self.links.iter_mut() {
             link.joint.apply_displacement(&disp[link.assembly_id..])
@@ -1360,8 +1373,143 @@ impl IndexSequence {
 #[cfg(test)]
 mod test {
     use super::IndexSequence;
-    use crate::math::Real;
+    use crate::dynamics::{ImpulseJointSet, IslandManager};
+    use crate::math::{Real, SPATIAL_DIM};
+    use crate::prelude::{
+        ColliderSet, MultibodyJointHandle, MultibodyJointSet, RevoluteJoint, RigidBodyBuilder,
+        RigidBodySet,
+    };
     use na::{DVector, RowDVector};
+
+    #[test]
+    fn test_multibody_append() {
+        let mut bodies = RigidBodySet::new();
+        let mut joints = MultibodyJointSet::new();
+
+        let a = bodies.insert(RigidBodyBuilder::dynamic());
+        let b = bodies.insert(RigidBodyBuilder::dynamic());
+        let c = bodies.insert(RigidBodyBuilder::dynamic());
+        let d = bodies.insert(RigidBodyBuilder::dynamic());
+
+        #[cfg(feature = "dim2")]
+        let joint = RevoluteJoint::new();
+        #[cfg(feature = "dim3")]
+        let joint = RevoluteJoint::new(na::Vector::x_axis());
+
+        let mb_handle = joints.insert(a, b, joint, true).unwrap();
+        joints.insert(c, d, joint, true).unwrap();
+        joints.insert(b, c, joint, true).unwrap();
+
+        assert_eq!(joints.get(mb_handle).unwrap().0.ndofs, SPATIAL_DIM + 3);
+    }
+
+    #[test]
+    fn test_multibody_insert() {
+        let mut rnd = oorandom::Rand32::new(1234);
+
+        for k in 0..10 {
+            let mut bodies = RigidBodySet::new();
+            let mut multibody_joints = MultibodyJointSet::new();
+
+            let num_links = 100;
+            let mut handles = vec![];
+
+            for _ in 0..num_links {
+                handles.push(bodies.insert(RigidBodyBuilder::dynamic()));
+            }
+
+            let mut insertion_id: Vec<_> = (0..num_links - 1).collect();
+
+            #[cfg(feature = "dim2")]
+            let joint = RevoluteJoint::new();
+            #[cfg(feature = "dim3")]
+            let joint = RevoluteJoint::new(na::Vector::x_axis());
+
+            match k {
+                0 => {} // Remove in insertion order.
+                1 => {
+                    // Remove from leaf to root.
+                    insertion_id.reverse();
+                }
+                _ => {
+                    // Shuffle the vector a bit.
+                    // (This test checks multiple shuffle arrangements due to k > 2).
+                    for l in 0..num_links - 1 {
+                        insertion_id.swap(l, rnd.rand_range(0..num_links as u32 - 1) as usize);
+                    }
+                }
+            }
+
+            let mut mb_handle = MultibodyJointHandle::invalid();
+            for i in insertion_id {
+                mb_handle = multibody_joints
+                    .insert(handles[i], handles[i + 1], joint, true)
+                    .unwrap();
+            }
+
+            assert_eq!(
+                multibody_joints.get(mb_handle).unwrap().0.ndofs,
+                SPATIAL_DIM + num_links - 1
+            );
+        }
+    }
+
+    #[test]
+    fn test_multibody_remove() {
+        let mut rnd = oorandom::Rand32::new(1234);
+
+        for k in 0..10 {
+            let mut bodies = RigidBodySet::new();
+            let mut multibody_joints = MultibodyJointSet::new();
+            let mut colliders = ColliderSet::new();
+            let mut impulse_joints = ImpulseJointSet::new();
+            let mut islands = IslandManager::new();
+
+            let num_links = 100;
+            let mut handles = vec![];
+
+            for _ in 0..num_links {
+                handles.push(bodies.insert(RigidBodyBuilder::dynamic()));
+            }
+
+            #[cfg(feature = "dim2")]
+            let joint = RevoluteJoint::new();
+            #[cfg(feature = "dim3")]
+            let joint = RevoluteJoint::new(na::Vector::x_axis());
+
+            for i in 0..num_links - 1 {
+                multibody_joints
+                    .insert(handles[i], handles[i + 1], joint, true)
+                    .unwrap();
+            }
+
+            match k {
+                0 => {} // Remove in insertion order.
+                1 => {
+                    // Remove from leaf to root.
+                    handles.reverse();
+                }
+                _ => {
+                    // Shuffle the vector a bit.
+                    // (This test checks multiple shuffle arrangements due to k > 2).
+                    for l in 0..num_links {
+                        handles.swap(l, rnd.rand_range(0..num_links as u32) as usize);
+                    }
+                }
+            }
+
+            for handle in handles {
+                bodies.remove(
+                    handle,
+                    &mut islands,
+                    &mut colliders,
+                    &mut impulse_joints,
+                    &mut multibody_joints,
+                    true,
+                );
+            }
+        }
+    }
 
     fn test_sequence() -> IndexSequence {
         let mut seq = IndexSequence::new();

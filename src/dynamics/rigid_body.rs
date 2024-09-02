@@ -11,6 +11,9 @@ use crate::utils::SimdCross;
 use diff::Diff;
 use num::Zero;
 
+#[cfg(doc)]
+use super::IntegrationParameters;
+
 use super::{RigidBodyActivationDiff, RigidBodyCcdDiff, RigidBodyChangesDiff, RigidBodyCollidersDiff, RigidBodyDampingDiff, RigidBodyDominanceDiff, RigidBodyForcesDiff, RigidBodyIdsDiff, RigidBodyMassPropsDiff, RigidBodyPositionDiff, RigidBodyTypeDiff, RigidBodyVelocityDiff};
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
