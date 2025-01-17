@@ -46,7 +46,7 @@ pub struct ColliderDiff {
     parent: Option<Option<ColliderParent>>,
     pos: Option<ColliderPosition>,
     material: Option<ColliderMaterial>,
-    //flags: Option<ColliderFlags>,
+    flags: Option<ColliderFlags>,
     //bf_data: Option<ColliderBroadPhaseData>,
     //contact_skin: Option<Real>,
     contact_force_event_threshold: Option<Real>,
@@ -65,7 +65,7 @@ impl Diff for Collider {
             parent: None,
             pos: None,
             material: None,
-            //flags: None,
+            flags: None,
             //bf_data: None,
             //contact_skin: None,
             contact_force_event_threshold: None,
@@ -100,9 +100,9 @@ impl Diff for Collider {
             diff.material = Some(other.material)
         }
 
-        // if other.flags != self.flags {
-        //     diff.flags = Some(other.flags)
-        // }
+        if other.flags != self.flags {
+            diff.flags = Some(other.flags)
+        }
 
         // if other.bf_data != self.bf_data {
         //     diff.bf_data = Some(other.bf_data)
@@ -153,9 +153,9 @@ impl Diff for Collider {
             self.material = *material
         }
 
-        // if let Some(flags) = &diff.flags {
-        //     self.flags = *flags
-        // }
+        if let Some(flags) = &diff.flags {
+            self.flags = *flags
+        }
 
         // if let Some(bf_data) = &diff.bf_data {
         //     self.bf_data = *bf_data
