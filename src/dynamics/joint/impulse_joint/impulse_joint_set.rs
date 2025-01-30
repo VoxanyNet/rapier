@@ -10,6 +10,9 @@ use crate::dynamics::{GenericJoint, IslandManager, RigidBodyHandle, RigidBodySet
 /// The unique identifier of a joint added to the joint set.
 /// The unique identifier of a collider added to a collider set.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Diff)]
+#[cfg_attr(feature = "serde-serialize", diff(attr(
+    #[derive(Serialize, Deserialize)]
+)))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct ImpulseJointHandle(pub crate::data::arena::Index);
