@@ -12,7 +12,7 @@ use std::ops::{Index, IndexMut};
 #[derive(Clone, Default, Debug, PartialEq)]
 /// A set of colliders that can be handled by a physics `World`.
 pub struct ColliderSet {
-    pub(crate) colliders: Arena<Collider>,
+    pub colliders: Arena<Collider>,
     pub(crate) modified_colliders: Vec<ColliderHandle>,
     pub(crate) removed_colliders: Vec<ColliderHandle>,
 }

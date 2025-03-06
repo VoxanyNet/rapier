@@ -25,7 +25,7 @@ use crate::prelude::{Collider, RigidBody};
 pub struct Arena<T> {
     items: Vec<Entry<T>>,
     generation: u32,
-    free_list_head: Option<u32>,
+    pub free_list_head: Option<u32>,
     len: usize,
 }
 
