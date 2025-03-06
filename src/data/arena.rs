@@ -8,7 +8,7 @@ use parry::partitioning::IndexedData;
 use std::cmp;
 use std::iter::{self, Extend, FromIterator, FusedIterator};
 use std::mem;
-use std::ops;
+use std::ops::{self};
 use std::slice;
 use std::vec;
 
@@ -33,7 +33,7 @@ pub struct Arena<T> {
 pub struct ColliderArenaDiff {
     items: Option<VecDiff<Entry<Collider>>>,
     generation: Option<u32>,
-    free_list_head: Option<Option<u32>>,
+    // free_list_head: Option<Option<u32>>,
     len: Option<usize>
 }
 
@@ -44,7 +44,7 @@ impl Diff for Arena<Collider> {
         let mut diff = ColliderArenaDiff {
             items: None,
             generation: None,
-            free_list_head: None,
+            // free_list_head: None,
             len: None,
         };
 
@@ -56,9 +56,9 @@ impl Diff for Arena<Collider> {
             diff.generation = Some(other.generation)
         }
 
-        if other.free_list_head != self.free_list_head {
-            diff.free_list_head = Some(other.free_list_head)
-        }
+        // if other.free_list_head != self.free_list_head {
+        //     diff.free_list_head = Some(other.free_list_head)
+        // }
 
         if other.len != self.len {
             diff.len = Some(other.len)
@@ -76,9 +76,9 @@ impl Diff for Arena<Collider> {
             self.generation = *generation
         }
 
-        if let Some(free_list_head) = &diff.free_list_head {
-            self.free_list_head = *free_list_head
-        }
+        // if let Some(free_list_head) = &diff.free_list_head {
+        //     self.free_list_head = *free_list_head
+        // }
 
         if let Some(len) = &diff.len {
             self.len = *len
@@ -94,7 +94,7 @@ impl Diff for Arena<Collider> {
 pub struct RigidBodyArenaDiff {
     items: Option<VecDiff<Entry<RigidBody>>>,
     generation: Option<u32>,
-    free_list_head: Option<Option<u32>>,
+    //free_list_head: Option<Option<u32>>,
     len: Option<usize>,
 }
 
@@ -105,7 +105,7 @@ impl Diff for Arena<RigidBody> {
         let mut diff = RigidBodyArenaDiff {
             items: None,
             generation: None,
-            free_list_head: None,
+            //free_list_head: None,
             len: None,
         };
 
@@ -117,9 +117,9 @@ impl Diff for Arena<RigidBody> {
             diff.generation = Some(other.generation)
         }
 
-        if other.free_list_head != self.free_list_head {
-            diff.free_list_head = Some(other.free_list_head)
-        }
+        // if other.free_list_head != self.free_list_head {
+        //     diff.free_list_head = Some(other.free_list_head)
+        // }
 
         if other.len != self.len {
             diff.len = Some(other.len)
@@ -137,9 +137,9 @@ impl Diff for Arena<RigidBody> {
             self.generation = *generation
         }
 
-        if let Some(free_list_head) = &diff.free_list_head {
-            self.free_list_head = *free_list_head
-        }
+        // if let Some(free_list_head) = &diff.free_list_head {
+        //     self.free_list_head = *free_list_head
+        // }
 
         if let Some(len) = &diff.len {
             self.len = *len
@@ -548,6 +548,10 @@ impl<T> Arena<T> {
     /// ```
     pub fn new() -> Arena<T> {
         Arena::with_capacity(DEFAULT_CAPACITY)
+    }
+
+    pub fn set_free_list_head(&mut self, free_list_head: u32) {
+        self.free_list_head = Some(free_list_head);
     }
 
     /// Constructs a new, empty `Arena<T>` with the specified capacity.
