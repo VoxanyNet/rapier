@@ -36,7 +36,7 @@ pub struct RigidBodySet {
     // to avoid borrowing issues. It is also needed for
     // parallelism because the `Receiver` breaks the Sync impl.
     // Could we avoid this?
-    pub(crate) bodies: Arena<RigidBody>,
+    pub bodies: Arena<RigidBody>,
     pub(crate) modified_bodies: Vec<RigidBodyHandle>,
 }
 
