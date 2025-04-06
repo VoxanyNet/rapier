@@ -1,5 +1,9 @@
 {
     "rust-analyzer.cargo.features": [
-        "simd-stable"
+        "simd-stable",
+        "serde-serialize"
+    ],
+    "rust-analyzer.check.features": [
+        "serde-serialize"
     ]
 }
