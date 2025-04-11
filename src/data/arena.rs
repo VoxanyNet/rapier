@@ -5,16 +5,14 @@
 //! Index attribution after a deserialization of the arena).
 use diff::{Diff, VecDiff};
 use parry::partitioning::IndexedData;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::cmp;
 use std::iter::{self, Extend, FromIterator, FusedIterator};
 use std::mem;
 use std::ops::{self};
 use std::slice;
 use std::vec;
-
-use crate::prelude::collider::ColliderDiff;
-use crate::prelude::rigid_body::RigidBodyDiff;
-use crate::prelude::{Collider, RigidBody};
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
@@ -30,24 +28,32 @@ pub struct Arena<T> {
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub struct ColliderArenaDiff {
-    items: Option<VecDiff<Entry<Collider>>>,
-    generation: Option<u32>,
-    // free_list_head: Option<Option<u32>>,
-    len: Option<usize>
+pub struct ArenaDiff<T>
+where 
+    T: Diff,
+    Entry<T>: Diff,
+    <Entry<T> as Diff>::Repr: DeserializeOwned + Serialize 
+{
+        items: Option<VecDiff<Entry<T>>>,
+        generation: Option<u32>,
+        // free_list_head: Option<Option<u32>>,
+        len: Option<usize>
 }
 
-impl Diff for Arena<Collider> {
-    type Repr = ColliderArenaDiff;
-    
+impl<T> Diff for Arena<T>
+where 
+    T: Diff + PartialEq,
+    T::Repr: Serialize + DeserializeOwned {
+    type Repr = ArenaDiff<T>;
+
     fn diff(&self, other: &Self) -> Self::Repr {
-        let mut diff = ColliderArenaDiff {
+        let mut diff: ArenaDiff<T> = ArenaDiff {
             items: None,
             generation: None,
             // free_list_head: None,
             len: None,
         };
-
+            
         if other.items != self.items {
             diff.items = Some(self.items.diff(&other.items));
         };
@@ -89,69 +95,6 @@ impl Diff for Arena<Collider> {
         Self::default()
     }
 }
-
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub struct RigidBodyArenaDiff {
-    items: Option<VecDiff<Entry<RigidBody>>>,
-    generation: Option<u32>,
-    //free_list_head: Option<Option<u32>>,
-    len: Option<usize>,
-}
-
-impl Diff for Arena<RigidBody> {
-    type Repr = RigidBodyArenaDiff;
-
-    fn diff(&self, other: &Self) -> Self::Repr {
-        let mut diff = RigidBodyArenaDiff {
-            items: None,
-            generation: None,
-            //free_list_head: None,
-            len: None,
-        };
-
-        if other.items != self.items {
-            diff.items = Some(self.items.diff(&other.items));
-        };
-
-        if other.generation != self.generation {
-            diff.generation = Some(other.generation)
-        }
-
-        // if other.free_list_head != self.free_list_head {
-        //     diff.free_list_head = Some(other.free_list_head)
-        // }
-
-        if other.len != self.len {
-            diff.len = Some(other.len)
-        }
-
-        diff
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(items) = &diff.items {
-            self.items.apply(items)
-        }
-
-        if let Some(generation) = &diff.generation {
-            self.generation = *generation
-        }
-
-        // if let Some(free_list_head) = &diff.free_list_head {
-        //     self.free_list_head = *free_list_head
-        // }
-
-        if let Some(len) = &diff.len {
-            self.len = *len
-        }
-    }
-
-    fn identity() -> Self {
-        Self::default()
-    }
-}
-
-
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -159,26 +102,31 @@ enum Entry<T> {
     Free { next_free: Option<u32> },
     Occupied { generation: u32, value: T },
 }
+
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum ColliderEntryDiff {
+pub enum EntryDiff<T:Diff>
+where T::Repr: Serialize + DeserializeOwned {
     Free { next_free: Option<Option<u32>> },
-    Occupied { generation: Option<u32>, value: Option<ColliderDiff> },
+    Occupied { generation: Option<u32>, value: Option<T::Repr> }
 }
 
-impl Diff for Entry<Collider> {
-    type Repr = ColliderEntryDiff;
+impl<T> Diff for Entry<T>
+where 
+    T: Diff + PartialEq,
+    T::Repr: Serialize + DeserializeOwned {
+    type Repr = EntryDiff<T>;
 
-    fn diff(&self, other: &Entry<Collider>) -> Self::Repr {
+    fn diff(&self, other: &Entry<T>) -> Self::Repr {
 
         let diff = match (self, other) {
             (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
 
-                let mut diff = ColliderEntryDiff::Free {
+                let mut diff = EntryDiff::Free {
                     next_free: None
                 }; 
 
                 if other_next_free != next_free {
-                    diff = ColliderEntryDiff::Free {
+                    diff = EntryDiff::Free {
                         next_free: Some(*other_next_free)
                     };
                 };
@@ -189,27 +137,27 @@ impl Diff for Entry<Collider> {
             (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
 
                 // this can probably be optimized
-                let mut diff = ColliderEntryDiff::Occupied {
+                let mut diff = EntryDiff::Occupied {
                     generation: None, 
                     value: None 
                 };
 
                 if other_generation != generation {
-                    diff = ColliderEntryDiff::Occupied {
+                    diff = EntryDiff::Occupied {
                         generation: Some(*other_generation), 
                         value: None 
                     };
                 };
 
                 if other_value != value {
-                    diff = ColliderEntryDiff::Occupied {
+                    diff = EntryDiff::Occupied {
                         generation: None, 
                         value: Some(value.diff(other_value))
                     };
                 };
 
                 if other_generation != generation && other_value != value {
-                    diff = ColliderEntryDiff::Occupied {
+                    diff = EntryDiff::Occupied {
                         generation: Some(*other_generation), 
                         value: Some(value.diff(other_value))
                     };
@@ -220,10 +168,10 @@ impl Diff for Entry<Collider> {
             (Entry::Free { next_free }, Entry::Occupied { generation: other_generation, value: other_value }) => {
                 // the entry is changed from free to occupied
 
-                ColliderEntryDiff::Occupied {
+                EntryDiff::Occupied {
                     generation: Some(*other_generation), 
                     value: Some(
-                        Collider::identity().diff(other_value) // because we aren't technically comparing this value to anything, we just want to make a new one
+                        T::identity().diff(other_value) // because we aren't technically comparing this value to anything, we just want to make a new one
                     ) 
                 }
             },
@@ -231,7 +179,7 @@ impl Diff for Entry<Collider> {
             (Entry::Occupied { generation, value }, Entry::Free { next_free: other_next_free }) => {
                 // the entry is changed from occupied to free
 
-                ColliderEntryDiff::Free { next_free: Some(*other_next_free) }
+                EntryDiff::Free { next_free: Some(*other_next_free) }
                 
             }
         };
@@ -240,19 +188,19 @@ impl Diff for Entry<Collider> {
     }
 
     fn apply(&mut self, diff: &Self::Repr) {
-
+        
         // if we need to mutate 'self' itself, then we set this value, then update it after we are done matching
-        let mut updated_value: Option<Entry<Collider>> = None;
+        let mut updated_value: Option<Entry<T>> = None;
 
         match (&mut *self, diff) {
-            (Entry::Free { next_free }, ColliderEntryDiff::Free { next_free: next_free_diff }) => {
+            (Entry::Free { next_free }, EntryDiff::Free { next_free: next_free_diff }) => {
                 if let Some(next_free_new) = next_free_diff {
                     *next_free = *next_free_new;
                 }
 
             }
 
-            (Entry::Occupied { generation, value }, ColliderEntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
+            (Entry::Occupied { generation, value }, EntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
                 if let Some(generation_new) = generation_diff {
                     *generation = *generation_new;
                 }
@@ -262,165 +210,33 @@ impl Diff for Entry<Collider> {
                 }
             },
 
-            (Entry::Free { next_free }, ColliderEntryDiff::Occupied { generation: other_generation, value: other_value }) => {
+            (Entry::Free { next_free }, EntryDiff::Occupied { generation: other_generation, value: other_value }) => {
                 // changing from free to occupied
 
-                // this is very weird
+                // this is very weird and probably not required
                 let mut generation = u32::identity();
                 generation.apply(&other_generation.expect("cannot diff an enum with dissimilar variants and not provide all fields"));
 
-                let mut value = Collider::identity();
+                let mut value = T::identity();
                 value.apply(&other_value.as_ref().expect("cannot diff an enum with dissimilar variants and not provide all fields"));
 
                 *self = Entry::Occupied { generation, value };
                 
             },
-            (Entry::Occupied { generation, value }, ColliderEntryDiff::Free { next_free: other_next_free }) => {
+            (Entry::Occupied { generation, value }, EntryDiff::Free { next_free: other_next_free }) => {
                 // changing from occupied to free
 
-                let next_free: Option<u32> = other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields"); 
+                let next_free= other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields"); 
 
                 *self = Entry::Free { next_free: next_free };
             }
         }
-
     }
 
     fn identity() -> Self {
-        // this might cause issues
         Self::Free { next_free: None }
     }
 }
-//// HERE 
-
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum RigidBodyEntryDiff {
-    Free { next_free: Option<Option<u32>> },
-    Occupied { generation: Option<u32>, value: Option<RigidBodyDiff> },
-    // add additional enum variant for no change?
-}
-
-impl Diff for Entry<RigidBody> {
-    type Repr = RigidBodyEntryDiff;
-
-    fn diff(&self, other: &Entry<RigidBody>) -> Self::Repr {
-
-        // this syntax is CRAZY
-        let diff = match (self, other) {
-            (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
-
-                let mut diff = RigidBodyEntryDiff::Free {
-                    next_free: None
-                }; 
-
-                if other_next_free != next_free {
-                    diff = RigidBodyEntryDiff::Free {
-                        next_free: Some(*other_next_free)
-                    };
-                };
-
-                diff
-
-            },
-            (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
-
-                // this can probably be optimized
-                let mut diff = RigidBodyEntryDiff::Occupied {
-                    generation: None, 
-                    value: None 
-                };
-
-                if other_generation != generation {
-                    diff = RigidBodyEntryDiff::Occupied {
-                        generation: Some(*other_generation), 
-                        value: None 
-                    };
-                };
-
-                if other_value != value {
-                    diff = RigidBodyEntryDiff::Occupied {
-                        generation: None, 
-                        value: Some(value.diff(other_value))
-                    };
-                };
-
-                if other_generation != generation && other_value != value {
-                    diff = RigidBodyEntryDiff::Occupied {
-                        generation: Some(*other_generation), 
-                        value: Some(value.diff(other_value))
-                    };
-                };
-
-                diff
-            },
-            (Entry::Free { next_free }, Entry::Occupied { generation: other_generation, value: other_value }) => {
-                // the entry is changed from free to occupied
-
-                RigidBodyEntryDiff::Occupied { 
-                    generation: Some(*other_generation), 
-                    value: Some(
-                        RigidBody::identity().diff(other_value)
-                    ) 
-                }
-            },
-            (Entry::Occupied { generation, value }, Entry::Free { next_free: other_next_free }) => {
-                // the entry is changed from occupied to free
-
-                RigidBodyEntryDiff::Free { next_free: Some(*other_next_free) }
-            }
-        };
-
-        diff
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-
-        match (&mut *self, diff) {
-            (Entry::Free { next_free }, RigidBodyEntryDiff::Free { next_free: next_free_diff }) => {
-                if let Some(next_free_new) = next_free_diff {
-                    *next_free = *next_free_new;
-                }
-            }
-
-            (Entry::Occupied { generation, value }, RigidBodyEntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
-                if let Some(generation_new) = generation_diff {
-                    *generation = *generation_new;
-                }
-
-                if let Some(value_new) = value_diff {
-                    value.apply(value_new);
-                }
-            }
-
-            (Entry::Free { next_free }, RigidBodyEntryDiff::Occupied { generation: other_generation, value: other_value }) => {
-                // changing from free to occupied
-
-                let mut generation = u32::identity();
-                generation.apply(&other_generation.expect("cannot diff an enum with dissimilar variants and not provide all fields"));
-                
-                let mut value = RigidBody::identity();
-                value.apply(&other_value.as_ref().expect("cannot diff an enum with dissimilar variants and not provide all fields"));
-
-                *self = Entry::Occupied { generation, value }
-            },
-
-            (Entry::Occupied { generation, value }, RigidBodyEntryDiff::Free { next_free: other_next_free }) => {
-                // changing from occupied to free
-
-                let next_free = other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields");
-
-                *self = Entry::Free { next_free: next_free };
-            }
-        }
-
-    }
-
-    fn identity() -> Self {
-        // this might cause issues
-        Self::Free { next_free: None }
-    }
-}
-
 
 
 /// An index (and generation) into an `Arena`.
