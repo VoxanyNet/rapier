@@ -21,10 +21,10 @@ use std::vec;
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct Arena<T> {
-    items: Vec<Entry<T>>,
-    generation: u32,
+    pub items: Vec<Entry<T>>,
+    pub generation: u32,
     pub free_list_head: Option<u32>,
-    len: usize,
+    pub len: usize,
 }
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -98,7 +98,7 @@ where
 
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-enum Entry<T> {
+pub enum Entry<T> {
     Free { next_free: Option<u32> },
     Occupied { generation: u32, value: T },
 }
