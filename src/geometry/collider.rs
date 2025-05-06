@@ -7,8 +7,8 @@ use crate::geometry::{
 use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector, DIM};
 use crate::parry::transformation::vhacd::VHACDParameters;
 use crate::pipeline::{ActiveEvents, ActiveHooks};
-use crate::prelude::ColliderEnabled;
-use diff::Diff;
+use crate::prelude::{ColliderEnabled, SyncRigidBodyHandle};
+use diff::{Diff, OptionDiff};
 use na::Unit;
 use parry::bounding_volume::{Aabb, BoundingVolume};
 use parry::shape::{Shape, TriMeshFlags};
@@ -43,7 +43,7 @@ pub struct ColliderDiff {
     shape: Option<ColliderShape>,
     //mprops: Option<ColliderMassProps>,
     //changes: Option<ColliderChanges>,
-    parent: Option<Option<ColliderParent>>,
+    parent: Option<OptionDiff<ColliderParent>>,
     pos: Option<ColliderPosition>,
     material: Option<ColliderMaterial>,
     flags: Option<ColliderFlags>,
@@ -89,7 +89,7 @@ impl Diff for Collider {
         // }
 
         if other.parent != self.parent {
-            diff.parent = Some(other.parent)
+            diff.parent = Some(self.parent.diff(&other.parent))
         }
 
         if other.pos != self.pos {
@@ -142,7 +142,7 @@ impl Diff for Collider {
         // }
 
         if let Some(parent) = &diff.parent {
-            self.parent = *parent
+            self.parent.apply(parent);
         }
 
         if let Some(pos) = &diff.pos {

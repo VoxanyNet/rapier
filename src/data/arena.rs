@@ -3,16 +3,34 @@
 //! See <https://github.com/fitzgen/generational-arena/blob/master/src/lib.rs>.
 //! This has been modified to have a fully deterministic deserialization (including for the order of
 //! Index attribution after a deserialization of the arena).
-use diff::{Diff, VecDiff};
+use diff::{Diff, HashMapDiff, VecDiff};
 use parry::partitioning::IndexedData;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use core::sync;
 use std::cmp;
+use std::collections::{HashMap, HashSet};
 use std::iter::{self, Extend, FromIterator, FusedIterator};
 use std::mem;
 use std::ops::{self};
 use std::slice;
 use std::vec;
+
+#[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy, Default)]
+#[diff(attr(
+    #[derive(Serialize, Deserialize)]
+))]
+pub struct SyncIndex {
+    id: u64
+}
+
+impl SyncIndex {
+    pub fn new() -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().as_u64_pair().0,
+        }
+    }
+}
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
@@ -25,19 +43,24 @@ pub struct Arena<T> {
     pub generation: u32,
     pub free_list_head: Option<u32>,
     pub len: usize,
+    // we can also point to indices in the arena using a global id
+    // this global id is constant between clients
+    pub sync_index_map: HashMap<SyncIndex, Index>,
+
+    // this might be dumb
+    // translate client indices back into sync index
+    pub index_sync_map: HashMap<Index, SyncIndex>
 }
+
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct ArenaDiff<T>
 where 
     T: Diff,
-    Entry<T>: Diff,
-    <Entry<T> as Diff>::Repr: DeserializeOwned + Serialize 
-{
-        items: Option<VecDiff<Entry<T>>>,
-        generation: Option<u32>,
-        // free_list_head: Option<Option<u32>>,
-        len: Option<usize>
+    T::Repr: Serialize + DeserializeOwned
+{   
+    pub altered: HashMap<SyncIndex, T::Repr>,
+    pub removed: HashSet<SyncIndex>
 }
 
 impl<T> Diff for Arena<T>
@@ -48,46 +71,67 @@ where
 
     fn diff(&self, other: &Self) -> Self::Repr {
         let mut diff: ArenaDiff<T> = ArenaDiff {
-            items: None,
-            generation: None,
-            // free_list_head: None,
-            len: None,
+            altered: HashMap::new(),
+            removed: HashSet::new()
         };
             
-        if other.items != self.items {
-            diff.items = Some(self.items.diff(&other.items));
+
+        for (sync_index, client_index) in &self.sync_index_map {
+
+            // item is in both arenas
+            if let Some(other_client_index) = other.sync_index_map.get(&sync_index) {
+                
+                // get the actual value
+                let value = self.get(*client_index).unwrap(); // this guaranteed to be Some
+
+                let other_value = other.get(*other_client_index).unwrap(); // this is guaranteed to be Some
+
+
+                if value != other_value {
+                    diff.altered.insert(*sync_index, value.diff(other_value));
+                };
+
+            // item is not in other (removed)
+            } else {
+                diff.removed.insert(*sync_index);
+            }
+        }
+
+        for (sync_index, client_index) in &other.sync_index_map {
+
+            // item is not in self (its new)
+            if let None = self.sync_index_map.get(sync_index) {
+
+                let value = other.get(*client_index).unwrap();
+
+                diff.altered.insert(*sync_index, T::identity().diff(value));
+            }
         };
-
-        if other.generation != self.generation {
-            diff.generation = Some(other.generation)
-        }
-
-        // if other.free_list_head != self.free_list_head {
-        //     diff.free_list_head = Some(other.free_list_head)
-        // }
-
-        if other.len != self.len {
-            diff.len = Some(other.len)
-        }
 
         diff
     }
 
     fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(items) = &diff.items {
-            self.items.apply(items)
-        }
+        diff.removed.iter().for_each(|deleted_sync_index| {
+            let client_index = self.sync_index_map.get(deleted_sync_index).unwrap(); // we might actually want to check this if its already been deleted
+            self.remove(*client_index);
+        });
 
-        if let Some(generation) = &diff.generation {
-            self.generation = *generation
-        }
+        for (sync_index, item_diff) in &diff.altered {
 
-        // if let Some(free_list_head) = &diff.free_list_head {
-        //     self.free_list_head = *free_list_head
-        // }
+            // item changed
+            if let Some(original_item_client_index) = self.sync_index_map.get(sync_index) {
 
-        if let Some(len) = &diff.len {
-            self.len = *len
+                let original_item = self.get_mut(*original_item_client_index).unwrap();
+
+                original_item.apply(item_diff);
+
+            // item is new
+            } else {
+                let index = self.insert(T::identity().apply_new(item_diff));
+
+                self.sync_index_map.insert(*sync_index, index);
+            }
         }
     }
 
@@ -101,141 +145,6 @@ where
 pub enum Entry<T> {
     Free { next_free: Option<u32> },
     Occupied { generation: u32, value: T },
-}
-
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum EntryDiff<T:Diff>
-where T::Repr: Serialize + DeserializeOwned {
-    Free { next_free: Option<Option<u32>> },
-    Occupied { generation: Option<u32>, value: Option<T::Repr> }
-}
-
-impl<T> Diff for Entry<T>
-where 
-    T: Diff + PartialEq,
-    T::Repr: Serialize + DeserializeOwned {
-    type Repr = EntryDiff<T>;
-
-    fn diff(&self, other: &Entry<T>) -> Self::Repr {
-
-        let diff = match (self, other) {
-            (Entry::Free { next_free: next_free }, Entry::Free { next_free: other_next_free }) => {
-
-                let mut diff = EntryDiff::Free {
-                    next_free: None
-                }; 
-
-                if other_next_free != next_free {
-                    diff = EntryDiff::Free {
-                        next_free: Some(*other_next_free)
-                    };
-                };
-
-                diff
-
-            },
-            (Entry::Occupied { generation, value }, Entry::Occupied { generation: other_generation, value: other_value }) => {
-
-                // this can probably be optimized
-                let mut diff = EntryDiff::Occupied {
-                    generation: None, 
-                    value: None 
-                };
-
-                if other_generation != generation {
-                    diff = EntryDiff::Occupied {
-                        generation: Some(*other_generation), 
-                        value: None 
-                    };
-                };
-
-                if other_value != value {
-                    diff = EntryDiff::Occupied {
-                        generation: None, 
-                        value: Some(value.diff(other_value))
-                    };
-                };
-
-                if other_generation != generation && other_value != value {
-                    diff = EntryDiff::Occupied {
-                        generation: Some(*other_generation), 
-                        value: Some(value.diff(other_value))
-                    };
-                };
-
-                diff
-            },
-            (Entry::Free { next_free }, Entry::Occupied { generation: other_generation, value: other_value }) => {
-                // the entry is changed from free to occupied
-
-                EntryDiff::Occupied {
-                    generation: Some(*other_generation), 
-                    value: Some(
-                        T::identity().diff(other_value) // because we aren't technically comparing this value to anything, we just want to make a new one
-                    ) 
-                }
-            },
-
-            (Entry::Occupied { generation, value }, Entry::Free { next_free: other_next_free }) => {
-                // the entry is changed from occupied to free
-
-                EntryDiff::Free { next_free: Some(*other_next_free) }
-                
-            }
-        };
-
-        diff
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        
-        // if we need to mutate 'self' itself, then we set this value, then update it after we are done matching
-        let mut updated_value: Option<Entry<T>> = None;
-
-        match (&mut *self, diff) {
-            (Entry::Free { next_free }, EntryDiff::Free { next_free: next_free_diff }) => {
-                if let Some(next_free_new) = next_free_diff {
-                    *next_free = *next_free_new;
-                }
-
-            }
-
-            (Entry::Occupied { generation, value }, EntryDiff::Occupied { generation: generation_diff, value: value_diff }) => {
-                if let Some(generation_new) = generation_diff {
-                    *generation = *generation_new;
-                }
-
-                if let Some(value_new) = value_diff {
-                    value.apply(value_new);
-                }
-            },
-
-            (Entry::Free { next_free }, EntryDiff::Occupied { generation: other_generation, value: other_value }) => {
-                // changing from free to occupied
-
-                // this is very weird and probably not required
-                let mut generation = u32::identity();
-                generation.apply(&other_generation.expect("cannot diff an enum with dissimilar variants and not provide all fields"));
-
-                let mut value = T::identity();
-                value.apply(&other_value.as_ref().expect("cannot diff an enum with dissimilar variants and not provide all fields"));
-
-                *self = Entry::Occupied { generation, value };
-                
-            },
-            (Entry::Occupied { generation, value }, EntryDiff::Free { next_free: other_next_free }) => {
-                // changing from occupied to free
-
-                let next_free= other_next_free.expect("cannot diff an enum with dissimilar variants and not provide all fields"); 
-
-                *self = Entry::Free { next_free: next_free };
-            }
-        }
-    }
-
-    fn identity() -> Self {
-        Self::Free { next_free: None }
-    }
 }
 
 
@@ -253,55 +162,13 @@ where
 /// let idx = arena.insert(123);
 /// assert_eq!(arena[idx], 123);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, diff::Diff)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct Index {
     index: u32,
     generation: u32,
 }
 
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub struct IndexDiff {
-    index: Option<u32>,
-    generation: Option<u32>
-}
-
-impl Diff for Index {
-
-    type Repr = IndexDiff;
-
-    fn diff(&self, other: &Self) -> Self::Repr {
-
-        let mut diff = IndexDiff {
-            index: None,
-            generation: None
-        };
-
-        if other.index != self.index {
-            diff.index = Some(other.index);
-        };
-
-        if other.generation != self.generation {
-            diff.generation = Some(other.generation);
-        };
-
-        diff
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(index) = diff.index {
-            self.index = index;
-        }
-
-        if let Some(generation) = diff.generation {
-            self.generation = generation;
-        }
-    }
-
-    fn identity() -> Self {
-        Index { index: u32::identity(), generation: u32::identity() }
-    }
-}
 
 impl Default for Index {
     fn default() -> Self {
@@ -366,6 +233,11 @@ impl<T> Arena<T> {
         Arena::with_capacity(DEFAULT_CAPACITY)
     }
 
+    /// Get the sync index for a given local index
+    pub fn get_sync_index(&self, local_index: Index) -> Option<&SyncIndex> {
+        self.index_sync_map.get(&local_index)
+    }
+
     pub fn set_free_list_head(&mut self, free_list_head: u32) {
         self.free_list_head = Some(free_list_head);
     }
@@ -392,10 +264,12 @@ impl<T> Arena<T> {
     pub fn with_capacity(n: usize) -> Arena<T> {
         let n = cmp::max(n, 1);
         let mut arena = Arena {
+            sync_index_map: HashMap::new(),
             items: Vec::new(),
             generation: 0,
             free_list_head: None,
             len: 0,
+            index_sync_map: HashMap::new()
         };
         arena.reserve(n);
         arena
@@ -548,11 +422,20 @@ impl<T> Arena<T> {
     /// ```
     #[inline]
     pub fn insert(&mut self, value: T) -> Index {
-        match self.try_insert(value) {
+        let index = match self.try_insert(value) {
             Ok(i) => i,
             Err(value) => self.insert_slow_path(value),
-        }
+        };
+
+        let sync_index = SyncIndex::new();
+
+        self.index_sync_map.insert(index, sync_index);
+        self.sync_index_map.insert(sync_index, index);
+
+        index
+
     }
+
 
     /// Insert the value returned by `create` into the arena, allocating more capacity if necessary.
     /// `create` is called with the new value's associated index, allowing values that know their own index.
@@ -625,6 +508,11 @@ impl<T> Arena<T> {
                         next_free: self.free_list_head,
                     },
                 );
+
+                let sync_index = self.index_sync_map.remove(&i).expect("could not find local index in index_sync map when removing");
+
+                self.sync_index_map.remove(&sync_index).expect("could not find sync index in sync_index map when removing");
+
                 self.generation += 1;
                 self.free_list_head = Some(i.index);
                 self.len -= 1;

@@ -1,11 +1,17 @@
 use diff::Diff;
 
-use crate::data::Arena;
+use crate::data::arena::ArenaDiff;
+use crate::data::{Arena};
 use crate::dynamics::{
     ImpulseJointSet, IslandManager, MultibodyJointSet, RigidBody, RigidBodyChanges, RigidBodyHandle,
 };
 use crate::geometry::ColliderSet;
+use crate::prelude::{ColliderHandle, SyncColliderHandle};
+use core::sync;
+use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
+
+use super::SyncRigidBodyHandle;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -24,10 +30,7 @@ impl BodyPair {
     }
 }
 
-#[derive(diff::Diff)]
-#[cfg_attr(feature = "serde-serialize", diff(attr(
-    #[derive(Serialize, Deserialize)]
-)))]
+
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug, PartialEq)]
 /// A set of rigid bodies that can be handled by a physics pipeline.
@@ -37,15 +40,44 @@ pub struct RigidBodySet {
     // parallelism because the `Receiver` breaks the Sync impl.
     // Could we avoid this?
     pub bodies: Arena<RigidBody>,
-    pub(crate) modified_bodies: Vec<RigidBodyHandle>,
+    pub(crate) modified_bodies: Vec<RigidBodyHandle>, // do we need to diff this?
 }
 
-// pub struct RigidBodySetDiff {
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct RigidBodySetDiff {
+    pub bodies: Option<ArenaDiff<RigidBody>>
+}
+
+impl Diff for RigidBodySet {
+    type Repr = RigidBodySetDiff;
     
-// }
-// impl Diff for RigidBodySet {
-//     type Repr = ;
-// }
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = RigidBodySetDiff {
+            bodies: None,
+        };
+
+        if other.bodies != self.bodies {
+
+            diff.bodies = Some(self.bodies.diff(&other.bodies));
+
+        };
+
+        diff
+    }
+    
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(bodies_diff) = &diff.bodies {
+            self.bodies.apply(bodies_diff);
+        }
+    }
+    
+    fn identity() -> Self {
+        Self::default()
+    } 
+
+    
+}
 
 impl RigidBodySet {
     /// Create a new empty set of rigid bodies.
@@ -57,7 +89,43 @@ impl RigidBodySet {
     }
 
     pub(crate) fn take_modified(&mut self) -> Vec<RigidBodyHandle> {
+
+        
         std::mem::take(&mut self.modified_bodies)
+    }
+
+    pub fn get_sync_handle(&self, local_handle: RigidBodyHandle) -> Option<SyncRigidBodyHandle> {
+        match self.bodies.index_sync_map.get(&local_handle.0) {
+            Some(sync_index) => Some(SyncRigidBodyHandle(*sync_index)),
+            None => None,
+        }
+    }
+
+    pub fn get_local_index(&self, sync_rigid_body_handle: SyncRigidBodyHandle) -> Option<RigidBodyHandle> {
+        match self.bodies.sync_index_map.get(&sync_rigid_body_handle.0) {
+            Some(local_index) => {
+                Some(RigidBodyHandle(*local_index))
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_sync(&self, sync_handle: SyncRigidBodyHandle) -> Option<&RigidBody> {
+        match self.bodies.sync_index_map.get(&sync_handle.0) {
+            Some(rigid_body_index) => {
+                self.bodies.get(*rigid_body_index)  // this will always be Some
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_sync_mut(&mut self, sync_handle: SyncRigidBodyHandle) -> Option<&mut RigidBody> {
+        match self.bodies.sync_index_map.get(&sync_handle.0) {
+            Some(rigid_body_index) => {
+                self.bodies.get_mut(*rigid_body_index)  // this will always be Some
+            },
+            None => None,
+        }
     }
 
     /// The number of rigid bodies on this set.

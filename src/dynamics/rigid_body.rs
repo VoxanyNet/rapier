@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use crate::data::arena::SyncIndex;
+use crate::data::Index;
 use crate::dynamics::{
     LockedAxes, MassProperties, RigidBodyActivation, RigidBodyAdditionalMassProps, RigidBodyCcd,
     RigidBodyChanges, RigidBodyColliders, RigidBodyDamping, RigidBodyDominance, RigidBodyForces,
@@ -7,8 +11,9 @@ use crate::geometry::{
     ColliderHandle, ColliderMassProps, ColliderParent, ColliderPosition, ColliderSet, ColliderShape,
 };
 use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector};
+use crate::prelude::{Collider, ColliderHandleDiff, SyncColliderHandle, SyncColliderHandleDiff};
 use crate::utils::SimdCross;
-use diff::Diff;
+use diff::{Diff, VecDiff};
 use num::Zero;
 
 #[cfg(doc)]
@@ -57,7 +62,7 @@ pub struct RigidBodyDiff {
     //forces: Option<RigidBodyForcesDiff>,
     //ccd: Option<RigidBodyCcdDiff>,
     //ids: Option<RigidBodyIdsDiff>,
-    colliders: Option<RigidBodyCollidersDiff>,
+    pub colliders: Option<RigidBodyCollidersDiff>, 
     activation: Option<RigidBodyActivationDiff>,
     //changes: Option<RigidBodyChangesDiff>,
     body_type: Option<RigidBodyTypeDiff>,
@@ -67,10 +72,16 @@ pub struct RigidBodyDiff {
     //user_data: Option<u128>,
 }
 
+impl Default for RigidBody {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Diff for RigidBody {
     type Repr = RigidBodyDiff;
 
-    fn diff(&self, other: &Self) -> Self::Repr {
+    fn diff(&self, other: &Self) -> RigidBodyDiff {
         let mut diff = RigidBodyDiff {
             pos: None,
             //mprops: None,
@@ -123,6 +134,7 @@ impl Diff for RigidBody {
         // }
 
         if self.colliders != other.colliders {
+
             diff.colliders = Some(self.colliders.diff(&other.colliders));
         }
 
@@ -228,13 +240,8 @@ impl Diff for RigidBody {
     }
 }
 
-impl Default for RigidBody {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl RigidBody {
+
     fn new() -> Self {
         Self {
             pos: RigidBodyPosition::default(), 

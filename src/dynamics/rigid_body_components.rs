@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use crate::data::arena::SyncIndex;
 use crate::dynamics::MassProperties;
 use crate::geometry::{
     ColliderChanges, ColliderHandle, ColliderMassProps, ColliderParent, ColliderPosition,
@@ -7,19 +10,73 @@ use crate::math::{
     AngVector, AngularInertia, Isometry, Point, Real, Rotation, Translation, Vector,
 };
 use crate::parry::partitioning::IndexedData;
+use crate::prelude::SyncColliderHandle;
 use crate::utils::{SimdAngularInertia, SimdCross, SimdDot};
-use diff::Diff;
+use diff::{Diff, VecDiff};
 use na::IsometryDiff;
 use num::Zero;
 
 #[cfg(doc)]
 use super::IntegrationParameters;
 
+#[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy)]
+#[diff(attr(
+    #[derive(Serialize, Deserialize)]
+))]
+pub struct SyncRigidBodyHandle(pub SyncIndex);
+
 /// The unique handle of a rigid body added to a `RigidBodySet`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct RigidBodyHandle(pub crate::data::arena::Index);
+
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub enum SyncLocalRigidBodyHandle {
+    Local(RigidBodyHandle),
+    Sync(SyncRigidBodyHandle)
+}
+
+// THIS IS DUMB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub enum RigidBodyHandleDiff {
+    NoChange,
+    Change(SyncLocalRigidBodyHandle)
+}
+
+impl Diff for RigidBodyHandle {
+    type Repr = RigidBodyHandleDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = RigidBodyHandleDiff::NoChange;
+
+        if self == other {
+            diff = RigidBodyHandleDiff::Change(SyncLocalRigidBodyHandle::Local(*other)); // this will get converted to sync
+        }
+
+        diff 
+    }
+
+    fn apply(&mut self, diff: &Self::Repr) {
+        match diff {
+            RigidBodyHandleDiff::NoChange => {},
+            RigidBodyHandleDiff::Change(sync_local_rigid_body_handle) => {
+                match sync_local_rigid_body_handle {
+                    SyncLocalRigidBodyHandle::Local(rigid_body_handle) => {
+                        *self = *rigid_body_handle
+                    },
+                    SyncLocalRigidBodyHandle::Sync(_) => unreachable!("you forgot to convert the sync id to local"),
+                }
+            },
+        }
+    }
+
+    fn identity() -> Self {
+        <RigidBodyHandle as Default>::default()
+    }
+}
+
 
 impl RigidBodyHandle {
     /// Converts this handle into its (index, generation) components.
@@ -38,24 +95,6 @@ impl RigidBodyHandle {
             crate::INVALID_U32,
             crate::INVALID_U32,
         ))
-    }
-}
-
-// struct RigidBodyHandleDiff(crate::data::arena::IndexDiff);
-
-impl Diff for RigidBodyHandle {
-    type Repr = <crate::data::arena::Index as Diff>::Repr;
-
-    fn diff(&self, other: &Self) -> Self::Repr {
-        self.0.diff(&other.0)
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        self.0.apply(diff)
-    }
-
-    fn identity() -> Self {
-        RigidBodyHandle(crate::data::arena::Index::identity())
     }
 }
 
@@ -1361,15 +1400,36 @@ impl Diff for RigidBodyIds {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Default, Clone, Debug, PartialEq, Eq, diff::Diff)]
-#[cfg_attr(feature = "serde-serialize", diff(attr(
+#[diff(attr(
     #[derive(Serialize, Deserialize)]
-)))]
+))]
 /// The set of colliders attached to this rigid-bodies.
 ///
 /// This should not be modified manually unless you really know what
 /// you are doing (for example if you are trying to integrate Rapier
 /// to a game engine using its component-based interface).
 pub struct RigidBodyColliders(pub Vec<ColliderHandle>);
+
+// impl Diff for RigidBodyColliders {
+//     type Repr = VecDiff<ColliderHandle>;
+
+//     fn diff(&self, other: &Self) -> Self::Repr {
+
+//         if self != other {
+//             self.0.diff(&other.0)
+//         } else {
+//             VecDiff::
+//         }
+//     }
+
+//     fn apply(&mut self, diff: &Self::Repr) {
+//         todo!()
+//     }
+
+//     fn identity() -> Self {
+//         todo!()
+//     }
+// }
 
 impl RigidBodyColliders {
     /// Detach a collider from this rigid-body.

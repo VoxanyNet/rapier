@@ -1,13 +1,15 @@
+use diff::Diff;
+
 use crate::data::arena::Arena;
 use crate::dynamics::{IslandManager, RigidBodyHandle, RigidBodySet};
 use crate::geometry::{Collider, ColliderChanges, ColliderHandle, ColliderParent};
 use crate::math::Isometry;
+use crate::prelude::SyncRigidBodyHandle;
+use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
 
-#[derive(diff::Diff)]
-#[cfg_attr(feature = "serde-serialize", diff(attr(
-    #[derive(Serialize, Deserialize)]
-)))]
+use super::SyncColliderHandle;
+
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug, PartialEq)]
 /// A set of colliders that can be handled by a physics `World`.
@@ -17,6 +19,40 @@ pub struct ColliderSet {
     pub(crate) removed_colliders: Vec<ColliderHandle>,
 }
 
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct ColliderSetDiff {
+    pub colliders: Option<<Arena<Collider> as Diff>::Repr>
+}
+
+impl Diff for ColliderSet {
+    type Repr = ColliderSetDiff;
+    
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = ColliderSetDiff {
+            colliders: None,
+        };
+
+        if other.colliders != self.colliders  {
+            diff.colliders = Some(self.colliders.diff(&other.colliders));
+        };
+
+        diff
+    }
+    
+    fn apply(&mut self, diff: &Self::Repr) {
+        if let Some(bodies_diff) = &diff.colliders {
+            self.colliders.apply(bodies_diff);
+        }
+    }
+    
+    fn identity() -> Self {
+        Self::default()
+    } 
+
+    
+}
+
 impl ColliderSet {
     /// Create a new empty set of colliders.
     pub fn new() -> Self {
@@ -24,6 +60,15 @@ impl ColliderSet {
             colliders: Arena::new(),
             modified_colliders: Vec::new(),
             removed_colliders: Vec::new(),
+        }
+    }
+
+    pub fn get_local_index(&self, sync_collider_handle: SyncColliderHandle) -> Option<ColliderHandle> {
+        match self.colliders.sync_index_map.get(&sync_collider_handle.0) {
+            Some(local_index) => {
+                Some(ColliderHandle(*local_index))
+            },
+            None => None,
         }
     }
 
@@ -121,9 +166,9 @@ impl ColliderSet {
         // NOTE: we use `get_mut` instead of `get_mut_internal` so that the
         // modification flag is updated properly.
         let parent = bodies
-            .get_mut_internal_with_modification_tracking(parent_handle)
-            .expect("Parent rigid body not found.");
-        let handle = ColliderHandle(self.colliders.insert(coll));
+        .get_mut_internal_with_modification_tracking(parent_handle)
+        .expect("Parent rigid body not found.");
+    let handle = ColliderHandle(self.colliders.insert(coll));
         self.modified_colliders.push(handle);
 
         let coll = self.colliders.get_mut(handle.0).unwrap();
@@ -143,7 +188,7 @@ impl ColliderSet {
         &mut self,
         handle: ColliderHandle,
         new_parent_handle: Option<RigidBodyHandle>,
-        bodies: &mut RigidBodySet,
+        bodies: &mut RigidBodySet
     ) {
         if let Some(collider) = self.get_mut(handle) {
             let curr_parent = collider.parent.map(|p| p.handle);
