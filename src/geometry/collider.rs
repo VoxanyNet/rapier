@@ -43,7 +43,7 @@ pub struct ColliderDiff {
     shape: Option<ColliderShape>,
     //mprops: Option<ColliderMassProps>,
     //changes: Option<ColliderChanges>,
-    parent: Option<OptionDiff<ColliderParent>>,
+    pub parent: Option<OptionDiff<ColliderParent>>,
     pos: Option<ColliderPosition>,
     material: Option<ColliderMaterial>,
     flags: Option<ColliderFlags>,
