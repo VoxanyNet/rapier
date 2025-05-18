@@ -1,74 +1,22 @@
 use diff::Diff;
 
-use crate::data::arena::SyncIndex;
 use crate::dynamics::{CoefficientCombineRule, MassProperties, RigidBodyHandle, RigidBodyType};
 use crate::geometry::{BroadPhaseProxyIndex, InteractionGroups, Shape, SharedShape};
 use crate::math::{Isometry, Real};
 use crate::parry::partitioning::IndexedData;
 use crate::pipeline::{ActiveEvents, ActiveHooks};
-use crate::prelude::SyncRigidBodyHandle;
-use std::default;
+use std::{default, u64};
 use std::ops::{Deref, DerefMut};
 
-
-#[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy, Default)]
+/// The unique identifier of a collider added to a collider set.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default, diff::Diff)]
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[diff(attr(
     #[derive(Serialize, Deserialize)]
 ))]
-pub struct SyncColliderHandle(pub SyncIndex);
-
-/// The unique identifier of a collider added to a collider set.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct ColliderHandle(pub crate::data::arena::Index);
 
-
-// type used in collider handle diff because we need to convert it to sync later!!!!!
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum SyncLocalColliderHandle {
-    Local(ColliderHandle),
-    Sync(SyncColliderHandle)
-}
-
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum ColliderHandleDiff {
-    NoChange,
-    Change(SyncLocalColliderHandle)
-}
-
-impl Diff for ColliderHandle {
-    type Repr = ColliderHandleDiff;
-
-    fn diff(&self, other: &Self) -> Self::Repr {
-
-        let mut diff = ColliderHandleDiff::NoChange;
-
-        if self == other {
-            diff = ColliderHandleDiff::Change(SyncLocalColliderHandle::Local(*other)); // this will get converted to sync
-        }
-
-        diff 
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        match diff {
-            ColliderHandleDiff::NoChange => {},
-            ColliderHandleDiff::Change(sync_local_collider_handle) => {
-                match sync_local_collider_handle {
-                    SyncLocalColliderHandle::Local(collider_handle) => {
-                        *self = *collider_handle
-                    },
-                    SyncLocalColliderHandle::Sync(_) => unreachable!("you forgot to convert the sync id to local"),
-                }
-            },
-        }
-    }
-
-    fn identity() -> Self {
-        <ColliderHandle as Default>::default()
-    }
-}
 
 impl ColliderHandle {
     /// Converts this handle into its (index, generation) components.
@@ -77,8 +25,8 @@ impl ColliderHandle {
     }
 
     /// Reconstructs an handle from its (index, generation) components.
-    pub fn from_raw_parts(id: u32, generation: u32) -> Self {
-        Self(crate::data::arena::Index::from_raw_parts(id, generation))
+    pub fn from_raw_parts(id: u32, generation: u32, sync_id: u64) -> Self {
+        Self(crate::data::arena::Index::from_raw_parts(id, generation, sync_id))
     }
 
     /// An always-invalid collider handle.
@@ -86,6 +34,7 @@ impl ColliderHandle {
         Self(crate::data::arena::Index::from_raw_parts(
             crate::INVALID_U32,
             crate::INVALID_U32,
+            u64::MAX
         ))
     }
 }

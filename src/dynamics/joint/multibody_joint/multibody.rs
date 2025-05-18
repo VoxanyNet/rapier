@@ -943,21 +943,21 @@ impl Multibody {
     ///
     /// This is typically called after [`Self::forward_kinematics`] to apply the new joint poses
     /// to the rigid-bodies.
-    pub fn update_rigid_bodies(&self, bodies: &mut RigidBodySet, update_mass_properties: bool) {
+    pub fn update_rigid_bodies(&mut self, bodies: &mut RigidBodySet, update_mass_properties: bool) {
         self.update_rigid_bodies_internal(bodies, update_mass_properties, false, true)
     }
 
     pub(crate) fn update_rigid_bodies_internal(
-        &self,
+        &mut self,
         bodies: &mut RigidBodySet,
         update_mass_properties: bool,
         update_next_positions_only: bool,
         change_tracking: bool,
     ) {
         // Handle the children. They all have a parent within this multibody.
-        for link in self.links.iter() {
+        for link in self.links.iter_mut() {
             let rb = if change_tracking {
-                bodies.get_mut_internal_with_modification_tracking(link.rigid_body)
+                bodies.get_mut_internal_with_modification_tracking(&mut link.rigid_body)
             } else {
                 bodies.get_mut_internal(link.rigid_body)
             };

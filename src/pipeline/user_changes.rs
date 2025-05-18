@@ -32,7 +32,7 @@ pub(crate) fn handle_user_changes_to_colliders(
             ) {
                 if let Some(rb) = co
                     .parent
-                    .and_then(|p| bodies.get_mut_internal_with_modification_tracking(p.handle))
+                    .and_then(|p| bodies.get_mut_internal_with_modification_tracking(&mut p.handle.clone()))
                 {
                     rb.changes |= RigidBodyChanges::LOCAL_MASS_PROPERTIES;
                 }

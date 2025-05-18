@@ -99,7 +99,7 @@ impl Diff for SAPProxy{
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(data) = &diff.data {
             self.data = data.clone()
         }
@@ -108,11 +108,11 @@ impl Diff for SAPProxy{
             self.aabb = aabb
         }
 
-        self.next_free.apply(&diff.next_free);
+        self.next_free.apply(&mut diff.next_free);
 
-        self.layer_id.apply(&diff.layer_id);
+        self.layer_id.apply(&mut diff.layer_id);
 
-        self.layer_depth.apply(&diff.layer_depth);
+        self.layer_depth.apply(&mut diff.layer_depth);
     }
 
     fn identity() -> Self {

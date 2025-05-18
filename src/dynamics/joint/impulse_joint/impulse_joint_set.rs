@@ -1,3 +1,5 @@
+use std::u64;
+
 use diff::Diff;
 
 use super::ImpulseJoint;
@@ -9,7 +11,10 @@ use crate::dynamics::{GenericJoint, IslandManager, RigidBodyHandle, RigidBodySet
 
 /// The unique identifier of a joint added to the joint set.
 /// The unique identifier of a collider added to a collider set.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Diff)]
+#[diff(attr(
+    #[derive(Serialize, Deserialize)]
+))]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct ImpulseJointHandle(pub crate::data::arena::Index);
@@ -21,8 +26,8 @@ impl ImpulseJointHandle {
     }
 
     /// Reconstructs an handle from its (index, generation) components.
-    pub fn from_raw_parts(id: u32, generation: u32) -> Self {
-        Self(crate::data::arena::Index::from_raw_parts(id, generation))
+    pub fn from_raw_parts(id: u32, generation: u32, sync_id: u64) -> Self {
+        Self(crate::data::arena::Index::from_raw_parts(id, generation, sync_id))
     }
 
     /// An always-invalid joint handle.
@@ -30,6 +35,7 @@ impl ImpulseJointHandle {
         Self(crate::data::arena::Index::from_raw_parts(
             crate::INVALID_U32,
             crate::INVALID_U32,
+            u64::MAX
         ))
     }
 }
@@ -137,18 +143,18 @@ impl ImpulseJointSet {
 
     /// Is the given joint handle valid?
     pub fn contains(&self, handle: ImpulseJointHandle) -> bool {
-        self.joint_ids.contains(handle.0)
+        self.joint_ids.contains(&mut handle.0.clone())
     }
 
     /// Gets the joint with the given handle.
     pub fn get(&self, handle: ImpulseJointHandle) -> Option<&ImpulseJoint> {
-        let id = self.joint_ids.get(handle.0)?;
+        let id = self.joint_ids.get(&mut handle.0.clone())?;
         self.joint_graph.graph.edge_weight(*id)
     }
 
     /// Gets a mutable reference to the joint with the given handle.
     pub fn get_mut(&mut self, handle: ImpulseJointHandle) -> Option<&mut ImpulseJoint> {
-        let id = self.joint_ids.get(handle.0)?;
+        let id = self.joint_ids.get(&mut handle.0.clone())?;
         self.joint_graph.graph.edge_weight_mut(*id)
     }
 
@@ -268,7 +274,7 @@ impl ImpulseJointSet {
             self.rb_graph_ids.insert(joint.body2.0, graph_index2);
         }
 
-        self.joint_ids[handle] = self.joint_graph.add_edge(graph_index1, graph_index2, joint);
+        self.joint_ids[&mut handle.clone()] = self.joint_graph.add_edge(graph_index1, graph_index2, joint);
 
         if wake_up {
             self.to_wake_up.push(body1);
@@ -332,7 +338,7 @@ impl ImpulseJointSet {
         let removed_joint = self.joint_graph.graph.remove_edge(id);
 
         if let Some(edge) = self.joint_graph.graph.edge_weight(id) {
-            self.joint_ids[edge.handle.0] = id;
+            self.joint_ids[&mut edge.handle.0.clone()] = id;
         }
 
         removed_joint
@@ -370,7 +376,7 @@ impl ImpulseJointSet {
 
                     // Update the id of the edge which took the place of the deleted one.
                     if let Some(j) = self.joint_graph.graph.edge_weight_mut(to_delete_edge_id) {
-                        self.joint_ids[j.handle.0] = to_delete_edge_id;
+                        self.joint_ids[&mut j.handle.0.clone()] = to_delete_edge_id;
                     }
 
                     // Wake up the attached bodies.

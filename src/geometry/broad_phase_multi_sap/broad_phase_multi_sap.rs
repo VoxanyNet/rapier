@@ -162,18 +162,18 @@ impl Diff for BroadPhaseMultiSap {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(proxies_diff) = &diff.proxies {
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        if let Some(proxies_diff) = &mut diff.proxies {
             self.proxies.apply(proxies_diff)
         }
 
-        if let Some(layers_diff) = &diff.layers {
+        if let Some(layers_diff) = &mut diff.layers {
             self.layers.apply(layers_diff)
         }
 
-        self.smallest_layer.apply(&diff.smallest_layer);
+        self.smallest_layer.apply(&mut diff.smallest_layer);
 
-        self.largest_layer.apply(&diff.largest_layer);
+        self.largest_layer.apply(&mut diff.largest_layer);
     }
 
     fn identity() -> Self {
@@ -724,7 +724,7 @@ mod test {
         let rb = RigidBodyBuilder::dynamic().build();
         let co = ColliderBuilder::ball(0.5).build();
         let hrb = bodies.insert(rb);
-        let coh = colliders.insert_with_parent(co, hrb, &mut bodies);
+        let coh = colliders.insert_with_parent(co, &mut hrb.clone(), &mut bodies);
 
         let mut events = Vec::new();
         broad_phase.update(0.0, 0.0, &mut colliders, &bodies, &[coh], &[], &mut events);
@@ -743,7 +743,7 @@ mod test {
         let rb = RigidBodyBuilder::dynamic().build();
         let co = ColliderBuilder::ball(0.5).build();
         let hrb = bodies.insert(rb);
-        let coh = colliders.insert_with_parent(co, hrb, &mut bodies);
+        let coh = colliders.insert_with_parent(co, &mut hrb.clone(), &mut bodies);
 
         // Make sure the proxy handles is recycled properly.
         broad_phase.update(0.0, 0.0, &mut colliders, &bodies, &[coh], &[], &mut events);

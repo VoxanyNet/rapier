@@ -5,10 +5,11 @@
 //! Index attribution after a deserialization of the arena).
 use diff::{Diff, HashMapDiff, VecDiff};
 use parry::partitioning::IndexedData;
-use serde::de::DeserializeOwned;
+use serde::de::{value, DeserializeOwned};
 use serde::Serialize;
+use uuid::Uuid;
 use core::sync;
-use std::cmp;
+use std::{cmp, default, u64};
 use std::collections::{HashMap, HashSet};
 use std::iter::{self, Extend, FromIterator, FusedIterator};
 use std::mem;
@@ -16,21 +17,23 @@ use std::ops::{self};
 use std::slice;
 use std::vec;
 
-#[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy, Default)]
-#[diff(attr(
-    #[derive(Serialize, Deserialize)]
-))]
-pub struct SyncIndex {
-    id: u64
-}
+use crate::INVALID_U32;
 
-impl SyncIndex {
-    pub fn new() -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().as_u64_pair().0,
-        }
-    }
-}
+// #[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy, Default)]
+// #[diff(attr(
+//     #[derive(Serialize, Deserialize)]
+// ))]
+// pub struct SyncIndex {
+//     id: u64
+// }
+
+// impl SyncIndex {
+//     pub fn new() -> Self {
+//         Self {
+//             id: uuid::Uuid::new_v4().as_u64_pair().0,
+//         }
+//     }
+// }
 
 /// The `Arena` allows inserting and removing elements that are referred to by
 /// `Index`.
@@ -43,13 +46,10 @@ pub struct Arena<T> {
     pub generation: u32,
     pub free_list_head: Option<u32>,
     pub len: usize,
-    // we can also point to indices in the arena using a global id
-    // this global id is constant between clients
-    pub sync_index_map: HashMap<SyncIndex, Index>,
-
-    // this might be dumb
-    // translate client indices back into sync index
-    pub index_sync_map: HashMap<Index, SyncIndex>
+    
+    // this maps a global sync index to local index and generation
+    // this is used to resolve the local index and generation with an Index struct
+    pub sync_index_map: HashMap<u64, (u32, u32)>,
 }
 
 
@@ -59,8 +59,8 @@ where
     T: Diff,
     T::Repr: Serialize + DeserializeOwned
 {   
-    pub altered: HashMap<SyncIndex, T::Repr>,
-    pub removed: HashSet<SyncIndex>
+    pub altered: HashMap<u64, T::Repr>,
+    pub removed: HashSet<u64>
 }
 
 impl<T> Diff for Arena<T>
@@ -74,63 +74,107 @@ where
             altered: HashMap::new(),
             removed: HashSet::new()
         };
-            
-
-        for (sync_index, client_index) in &self.sync_index_map {
-
-            // item is in both arenas
-            if let Some(other_client_index) = other.sync_index_map.get(&sync_index) {
+        
+        
+        for (index, item) in self.items.iter().enumerate() {
+            if let Entry::Occupied { generation, sync_id,  value } = item {
                 
-                // get the actual value
-                let value = self.get(*client_index).unwrap(); // this guaranteed to be Some
+                match other.get(&mut Index::from_raw_parts(index as u32, *generation, *sync_id)) {
 
-                let other_value = other.get(*other_client_index).unwrap(); // this is guaranteed to be Some
+                    // item is in both arenas
+                    Some(other_value) => {
+                        if other_value != value {
+                            diff.altered.insert(
+                                *sync_id, 
+                                value.diff(other_value)
+                            );
+                        };
+                    },
 
+                    // item has been deleted
+                    None => {
+                        diff.removed.insert(*sync_id);
+                    },
+                }
+            }
+        }   
 
-                if value != other_value {
-                    diff.altered.insert(*sync_index, value.diff(other_value));
-                };
+        for (other_index, other_item) in other.items.iter().enumerate() {
+            if let Entry::Occupied { generation: other_generation, sync_id: other_sync_id, value: other_value } =  other_item {
 
-            // item is not in other (removed)
-            } else {
-                diff.removed.insert(*sync_index);
+                match self.get(&mut Index::from_raw_parts(other_index as u32, *other_generation, *other_sync_id)) {
+
+                    // item is in both arenas (dont need to do anything)
+                    Some(_) => {
+                        
+                    },
+
+                    // item is not in old arena, it is new
+                    None => {
+                        diff.altered.insert(
+                            *other_sync_id, 
+                            T::identity().diff(other_value)
+                        );
+                    },
+                }
             }
         }
 
-        for (sync_index, client_index) in &other.sync_index_map {
+        // for (sync_index, client_index) in &self.sync_index_map {
 
-            // item is not in self (its new)
-            if let None = self.sync_index_map.get(sync_index) {
+        //     // item is in both arenas
+        //     if let Some(other_client_index) = other.sync_index_map.get(&sync_index) {
+                
+        //         // get the actual value
+        //         let value = self.get(*client_index).unwrap(); // this guaranteed to be Some
 
-                let value = other.get(*client_index).unwrap();
+        //         let other_value = other.get(*other_client_index).unwrap(); // this is guaranteed to be Some
 
-                diff.altered.insert(*sync_index, T::identity().diff(value));
-            }
-        };
+
+        //         if value != other_value {
+        //             diff.altered.insert(*sync_index, value.diff(other_value));
+        //         };
+
+        //     // item is not in other (removed)
+        //     } else {
+        //         diff.removed.insert(*sync_index);
+        //     }
+        // }
+
+        // for (sync_index, client_index) in &other.sync_index_map {
+
+        //     // item is not in self (its new)
+        //     if let None = self.sync_index_map.get(sync_index) {
+
+        //         let value = other.get(*client_index).unwrap();
+
+        //         diff.altered.insert(*sync_index, T::identity().diff(value));
+        //     }
+        // };
 
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        // THIS IS WHERE THE SYNC IDs REALLY MATTER
+
         diff.removed.iter().for_each(|deleted_sync_index| {
-            let client_index = self.sync_index_map.get(deleted_sync_index).unwrap(); // we might actually want to check this if its already been deleted
-            self.remove(*client_index);
+            let (client_index, client_generation) = self.sync_index_map.get(deleted_sync_index).unwrap(); // we might actually want to check this if its already been deleted
+            self.remove(Index::from_raw_parts(*client_index, *client_generation, *deleted_sync_index));
         });
 
-        for (sync_index, item_diff) in &diff.altered {
+        for (sync_index, item_diff) in &mut diff.altered {
 
-            // item changed
-            if let Some(original_item_client_index) = self.sync_index_map.get(sync_index) {
+            // item only changed (its already in the sync index map)
+            if let Some((original_item_client_index, original_item_client_generation)) = self.sync_index_map.get(sync_index) {
 
-                let original_item = self.get_mut(*original_item_client_index).unwrap();
+                let original_item = self.get_mut(&mut Index::from_raw_parts(*original_item_client_index, *original_item_client_generation, *sync_index)).unwrap();
 
                 original_item.apply(item_diff);
 
-            // item is new
+            // item is new (its not already in the sync index map)
             } else {
-                let index = self.insert(T::identity().apply_new(item_diff));
-
-                self.sync_index_map.insert(*sync_index, index);
+                self.insert_with_known_sync_id(T::identity().apply_new(item_diff), *sync_index);
             }
         }
     }
@@ -144,7 +188,7 @@ where
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub enum Entry<T> {
     Free { next_free: Option<u32> },
-    Occupied { generation: u32, value: T },
+    Occupied { generation: u32, sync_id: u64, value: T },
 }
 
 
@@ -162,17 +206,65 @@ pub enum Entry<T> {
 /// let idx = arena.insert(123);
 /// assert_eq!(arena[idx], 123);
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, diff::Diff)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct Index {
     index: u32,
     generation: u32,
+    // we need this because we cannot resolve the local indices of this sync index when applying the diff for the index (we dont have access to the data or the item might not even be in the arena yet)
+    // the local index and generation are resolved
+    synced: bool, // index and generation are INVALID if this is false
+    sync_id: u64 
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
+pub struct IndexDiff {
+    sync_id: Option<u64>
+}
+
+
+
+impl Diff for Index {
+    type Repr = IndexDiff;
+
+    fn diff(&self, other: &Self) -> Self::Repr {
+
+        let mut diff = Self::Repr {
+            sync_id: None,
+        };
+
+        // we only need to check the sync id because this inequality implies that the local index has changed as well
+        if self.sync_id != other.sync_id {
+            diff.sync_id = Some(other.sync_id)
+        };
+
+        diff
+    }
+
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        
+        if let Some(sync_id) = diff.sync_id {
+            self.sync_id = sync_id;
+
+            // this indicates that the local index and generation are no longer valid
+            self.synced = false;
+
+            // not really needed but will produce a runtime error that could be useful for debugging
+            self.index = u32::MAX;
+            self.generation = u32::MAX;
+        }
+    }
+
+    fn identity() -> Self {
+        <Index as Default>::default()
+    }
 }
 
 
 impl Default for Index {
     fn default() -> Self {
-        Self::from_raw_parts(crate::INVALID_U32, crate::INVALID_U32)
+        Self::from_raw_parts(crate::INVALID_U32, crate::INVALID_U32, crate::INVALID_U32 as u64)
     }
 }
 
@@ -194,8 +286,13 @@ impl Index {
     ///
     /// Providing arbitrary values will lead to malformed indices and ultimately
     /// panics.
-    pub fn from_raw_parts(index: u32, generation: u32) -> Index {
-        Index { index, generation }
+    pub fn from_raw_parts(index: u32, generation: u32, sync_id: u64) -> Index {
+        Index { 
+            index,
+            generation,
+            sync_id,
+            synced: true    
+        }
     }
 
     /// Convert this `Index` into its raw parts.
@@ -233,11 +330,6 @@ impl<T> Arena<T> {
         Arena::with_capacity(DEFAULT_CAPACITY)
     }
 
-    /// Get the sync index for a given local index
-    pub fn get_sync_index(&self, local_index: Index) -> Option<&SyncIndex> {
-        self.index_sync_map.get(&local_index)
-    }
-
     pub fn set_free_list_head(&mut self, free_list_head: u32) {
         self.free_list_head = Some(free_list_head);
     }
@@ -268,8 +360,7 @@ impl<T> Arena<T> {
             items: Vec::new(),
             generation: 0,
             free_list_head: None,
-            len: 0,
-            index_sync_map: HashMap::new()
+            len: 0
         };
         arena.reserve(n);
         arena
@@ -341,6 +432,7 @@ impl<T> Arena<T> {
                 self.items[index.index as usize] = Entry::Occupied {
                     generation: self.generation,
                     value,
+                    sync_id: index.sync_id
                 };
                 Ok(index)
             }
@@ -382,6 +474,7 @@ impl<T> Arena<T> {
                 self.items[index.index as usize] = Entry::Occupied {
                     generation: self.generation,
                     value: create(index),
+                    sync_id: index.sync_id
                 };
                 Ok(index)
             }
@@ -400,6 +493,8 @@ impl<T> Arena<T> {
                     Some(Index {
                         index: i,
                         generation: self.generation,
+                        sync_id: uuid::Uuid::new_v4().as_u64_pair().0,
+                        synced: true
                     })
                 }
             },
@@ -427,13 +522,25 @@ impl<T> Arena<T> {
             Err(value) => self.insert_slow_path(value),
         };
 
-        let sync_index = SyncIndex::new();
-
-        self.index_sync_map.insert(index, sync_index);
-        self.sync_index_map.insert(sync_index, index);
+        self.sync_index_map.insert(index.sync_id, (index.index, index.generation));
 
         index
 
+    }
+
+    #[inline]
+    pub fn insert_with_known_sync_id(&mut self, value: T, sync_id: u64) -> Index {
+        let mut index = match self.try_insert(value) {
+            Ok(i) => i,
+            Err(value) => self.insert_slow_path(value),
+        };
+
+        index.sync_id = sync_id;
+
+
+        self.sync_index_map.insert(sync_id, (index.index, index.generation));
+
+        index
     }
 
 
@@ -509,10 +616,6 @@ impl<T> Arena<T> {
                     },
                 );
 
-                let sync_index = self.index_sync_map.remove(&i).expect("could not find local index in index_sync map when removing");
-
-                self.sync_index_map.remove(&sync_index).expect("could not find sync index in sync_index map when removing");
-
                 self.generation += 1;
                 self.free_list_head = Some(i.index);
                 self.len -= 1;
@@ -521,7 +624,13 @@ impl<T> Arena<T> {
                     Entry::Occupied {
                         generation: _,
                         value,
-                    } => Some(value),
+                        sync_id,
+                    } => {
+
+                        self.sync_index_map.remove(&sync_id).expect("could not find sync index in sync_index map when removing");
+
+                        Some(value)
+                    },
                     _ => unreachable!(),
                 }
             }
@@ -550,10 +659,12 @@ impl<T> Arena<T> {
     pub fn retain(&mut self, mut predicate: impl FnMut(Index, &mut T) -> bool) {
         for i in 0..self.capacity() as u32 {
             let remove = match &mut self.items[i as usize] {
-                Entry::Occupied { generation, value } => {
+                Entry::Occupied { generation, value, sync_id } => {
                     let index = Index {
                         index: i,
                         generation: *generation,
+                        sync_id: *sync_id,
+                        synced: true
                     };
                     if predicate(index, value) {
                         None
@@ -586,7 +697,7 @@ impl<T> Arena<T> {
     /// arena.remove(idx);
     /// assert!(!arena.contains(idx));
     /// ```
-    pub fn contains(&self, i: Index) -> bool {
+    pub fn contains(&self, i: &mut Index) -> bool {
         self.get(i).is_some()
     }
 
@@ -607,9 +718,23 @@ impl<T> Arena<T> {
     /// arena.remove(idx);
     /// assert!(arena.get(idx).is_none());
     /// ```
-    pub fn get(&self, i: Index) -> Option<&T> {
+    pub fn get(&self, i: &mut Index) -> Option<&T> {
+
+        // we need to resolve the local index
+        if i.synced == false {
+            let (local_index, local_generation) = self.sync_index_map.get(&i.sync_id).unwrap();
+
+            i.index = *local_index;
+
+            i.generation = *local_generation;
+
+            i.synced = true;
+
+        }
+
         match self.items.get(i.index as usize) {
-            Some(Entry::Occupied { generation, value }) if *generation == i.generation => {
+            // we dont need to check the sync id because a given local index will only ever match to one sync id
+            Some(Entry::Occupied { generation, value, sync_id: _ }) if *generation == i.generation => {
                 Some(value)
             }
             _ => None,
@@ -633,9 +758,9 @@ impl<T> Arena<T> {
     /// assert_eq!(arena.remove(idx), Some(43));
     /// assert!(arena.get_mut(idx).is_none());
     /// ```
-    pub fn get_mut(&mut self, i: Index) -> Option<&mut T> {
+    pub fn get_mut(&mut self, i: &mut Index) -> Option<&mut T> {
         match self.items.get_mut(i.index as usize) {
-            Some(Entry::Occupied { generation, value }) if *generation == i.generation => {
+            Some(Entry::Occupied { generation, value, sync_id }) if *generation == i.generation => {
                 Some(value)
             }
             _ => None,
@@ -671,7 +796,7 @@ impl<T> Arena<T> {
     /// assert_eq!(arena[idx1], 3);
     /// assert_eq!(arena[idx2], 4);
     /// ```
-    pub fn get2_mut(&mut self, i1: Index, i2: Index) -> (Option<&mut T>, Option<&mut T>) {
+    pub fn get2_mut(&mut self, i1: &mut Index, i2: &mut Index) -> (Option<&mut T>, Option<&mut T>) {
         let len = self.items.len() as u32;
 
         if i1.index == i2.index {
@@ -701,12 +826,12 @@ impl<T> Arena<T> {
         };
 
         let item1 = match raw_item1 {
-            Entry::Occupied { generation, value } if *generation == i1.generation => Some(value),
+            Entry::Occupied { generation, value, sync_id } if *generation == i1.generation => Some(value),
             _ => None,
         };
 
         let item2 = match raw_item2 {
-            Entry::Occupied { generation, value } if *generation == i2.generation => Some(value),
+            Entry::Occupied { generation, value, sync_id } if *generation == i2.generation => Some(value),
             _ => None,
         };
 
@@ -918,11 +1043,13 @@ impl<T> Arena<T> {
     /// You should use the `get` method instead most of the time.
     pub fn get_unknown_gen(&self, i: u32) -> Option<(&T, Index)> {
         match self.items.get(i as usize) {
-            Some(Entry::Occupied { generation, value }) => Some((
+            Some(Entry::Occupied { generation, value, sync_id }) => Some((
                 value,
                 Index {
                     generation: *generation,
                     index: i,
+                    sync_id: *sync_id,
+                    synced: true
                 },
             )),
             _ => None,
@@ -941,11 +1068,13 @@ impl<T> Arena<T> {
     /// You should use the `get_mut` method instead most of the time.
     pub fn get_unknown_gen_mut(&mut self, i: u32) -> Option<(&mut T, Index)> {
         match self.items.get_mut(i as usize) {
-            Some(Entry::Occupied { generation, value }) => Some((
+            Some(Entry::Occupied { generation, value, sync_id }) => Some((
                 value,
                 Index {
                     generation: *generation,
                     index: i,
+                    synced: true,
+                    sync_id: *sync_id
                 },
             )),
             _ => None,
@@ -1086,12 +1215,15 @@ impl<'a, T> Iterator for Iter<'a, T> {
                     &Entry::Occupied {
                         generation,
                         ref value,
+                        sync_id,
                     },
                 )) => {
                     self.len -= 1;
                     let idx = Index {
                         index: index as u32,
                         generation,
+                        sync_id,
+                        synced: true
                     };
                     return Some((idx, value));
                 }
@@ -1117,13 +1249,15 @@ impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
                     index,
                     &Entry::Occupied {
                         generation,
-                        ref value,
-                    },
+                        ref value, 
+                        sync_id },
                 )) => {
                     self.len -= 1;
                     let idx = Index {
                         index: index as u32,
                         generation,
+                        sync_id,
+                        synced: true
                     };
                     return Some((idx, value));
                 }
@@ -1190,12 +1324,15 @@ impl<'a, T> Iterator for IterMut<'a, T> {
                     &mut Entry::Occupied {
                         generation,
                         ref mut value,
+                        sync_id
                     },
                 )) => {
                     self.len -= 1;
                     let idx = Index {
                         index: index as u32,
                         generation,
+                        sync_id,
+                        synced: true
                     };
                     return Some((idx, value));
                 }
@@ -1221,13 +1358,16 @@ impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
                     index,
                     &mut Entry::Occupied {
                         generation,
-                        ref mut value,
+                        ref mut value, 
+                        sync_id 
                     },
                 )) => {
                     self.len -= 1;
                     let idx = Index {
                         index: index as u32,
                         generation,
+                        sync_id,
+                        synced: true
                     };
                     return Some((idx, value));
                 }
@@ -1285,10 +1425,12 @@ impl<'a, T> Iterator for Drain<'a, T> {
         loop {
             match self.inner.next() {
                 Some((_, Entry::Free { .. })) => continue,
-                Some((index, Entry::Occupied { generation, value })) => {
+                Some((index, Entry::Occupied { generation, value, sync_id })) => {
                     let idx = Index {
                         index: index as u32,
                         generation,
+                        sync_id,
+                        synced: true
                     };
                     return Some((idx, value));
                 }
@@ -1318,16 +1460,16 @@ impl<T> FromIterator<T> for Arena<T> {
     }
 }
 
-impl<T> ops::Index<Index> for Arena<T> {
+impl<T> ops::Index<&mut Index> for Arena<T> {
     type Output = T;
 
-    fn index(&self, index: Index) -> &Self::Output {
+    fn index(&self, index: &mut Index) -> &Self::Output {
         self.get(index).expect("No element at index")
     }
 }
 
-impl<T> ops::IndexMut<Index> for Arena<T> {
-    fn index_mut(&mut self, index: Index) -> &mut Self::Output {
+impl<T> ops::IndexMut<&mut Index> for Arena<T> {
+    fn index_mut(&mut self, index: &mut Index) -> &mut Self::Output {
         self.get_mut(index).expect("No element at index")
     }
 }

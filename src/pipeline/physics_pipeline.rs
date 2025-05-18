@@ -688,12 +688,12 @@ mod test {
         let rb = RigidBodyBuilder::fixed().build();
         let h1 = bodies.insert(rb.clone());
         let co = ColliderBuilder::ball(10.0).build();
-        colliders.insert_with_parent(co.clone(), h1, &mut bodies);
+        colliders.insert_with_parent(co.clone(), &mut h1.clone(), &mut bodies);
 
         // The same but with a kinematic body.
         let rb = RigidBodyBuilder::kinematic_position_based().build();
         let h2 = bodies.insert(rb.clone());
-        colliders.insert_with_parent(co, h2, &mut bodies);
+        colliders.insert_with_parent(co, &mut h2.clone(), &mut bodies);
 
         pipeline.step(
             &Vector::zeros(),
@@ -842,7 +842,7 @@ mod test {
         let body = RigidBodyBuilder::dynamic().build();
         let b_handle = bodies.insert(body);
         let collider = ColliderBuilder::ball(1.0).build();
-        let c_handle = colliders.insert_with_parent(collider, b_handle, &mut bodies);
+        let c_handle = colliders.insert_with_parent(collider, &mut b_handle.clone(), &mut bodies);
         colliders.remove(c_handle, &mut islands, &mut bodies, true);
         bodies.remove(
             b_handle,
@@ -910,7 +910,7 @@ mod test {
 
         // Switch body type to Dynamic
         bodies
-            .get_mut(h)
+            .get_mut(&mut h.clone())
             .unwrap()
             .set_body_type(RigidBodyType::Dynamic, true);
 

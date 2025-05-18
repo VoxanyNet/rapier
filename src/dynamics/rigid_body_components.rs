@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use std::u64;
 
-use crate::data::arena::SyncIndex;
 use crate::dynamics::MassProperties;
 use crate::geometry::{
     ColliderChanges, ColliderHandle, ColliderMassProps, ColliderParent, ColliderPosition,
@@ -10,7 +10,6 @@ use crate::math::{
     AngVector, AngularInertia, Isometry, Point, Real, Rotation, Translation, Vector,
 };
 use crate::parry::partitioning::IndexedData;
-use crate::prelude::SyncColliderHandle;
 use crate::utils::{SimdAngularInertia, SimdCross, SimdDot};
 use diff::{Diff, VecDiff};
 use na::IsometryDiff;
@@ -19,63 +18,14 @@ use num::Zero;
 #[cfg(doc)]
 use super::IntegrationParameters;
 
-#[derive(Hash, PartialEq, Eq, Diff, Serialize, Deserialize, Clone, Debug, Copy)]
+/// The unique handle of a rigid body added to a `RigidBodySet`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default, diff::Diff)]
+#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[diff(attr(
     #[derive(Serialize, Deserialize)]
 ))]
-pub struct SyncRigidBodyHandle(pub SyncIndex);
-
-/// The unique handle of a rigid body added to a `RigidBodySet`.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[repr(transparent)]
 pub struct RigidBodyHandle(pub crate::data::arena::Index);
-
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum SyncLocalRigidBodyHandle {
-    Local(RigidBodyHandle),
-    Sync(SyncRigidBodyHandle)
-}
-
-// THIS IS DUMB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
-pub enum RigidBodyHandleDiff {
-    NoChange,
-    Change(SyncLocalRigidBodyHandle)
-}
-
-impl Diff for RigidBodyHandle {
-    type Repr = RigidBodyHandleDiff;
-
-    fn diff(&self, other: &Self) -> Self::Repr {
-
-        let mut diff = RigidBodyHandleDiff::NoChange;
-
-        if self == other {
-            diff = RigidBodyHandleDiff::Change(SyncLocalRigidBodyHandle::Local(*other)); // this will get converted to sync
-        }
-
-        diff 
-    }
-
-    fn apply(&mut self, diff: &Self::Repr) {
-        match diff {
-            RigidBodyHandleDiff::NoChange => {},
-            RigidBodyHandleDiff::Change(sync_local_rigid_body_handle) => {
-                match sync_local_rigid_body_handle {
-                    SyncLocalRigidBodyHandle::Local(rigid_body_handle) => {
-                        *self = *rigid_body_handle
-                    },
-                    SyncLocalRigidBodyHandle::Sync(_) => unreachable!("you forgot to convert the sync id to local"),
-                }
-            },
-        }
-    }
-
-    fn identity() -> Self {
-        <RigidBodyHandle as Default>::default()
-    }
-}
 
 
 impl RigidBodyHandle {
@@ -85,8 +35,8 @@ impl RigidBodyHandle {
     }
 
     /// Reconstructs an handle from its (index, generation) components.
-    pub fn from_raw_parts(id: u32, generation: u32) -> Self {
-        Self(crate::data::arena::Index::from_raw_parts(id, generation))
+    pub fn from_raw_parts(id: u32, generation: u32, sync_id: u64) -> Self {
+        Self(crate::data::arena::Index::from_raw_parts(id, generation, sync_id))
     }
 
     /// An always-invalid rigid-body handle.
@@ -94,6 +44,7 @@ impl RigidBodyHandle {
         Self(crate::data::arena::Index::from_raw_parts(
             crate::INVALID_U32,
             crate::INVALID_U32,
+            u64::MAX
         ))
     }
 }
@@ -203,7 +154,7 @@ impl Diff for RigidBodyChanges {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(changes) = diff.changes {
             *self = changes;
         }
@@ -265,13 +216,13 @@ impl Diff for RigidBodyPosition {
 
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(position_diff) = diff.position {
-            self.position.apply(&position_diff);
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        if let Some(mut position_diff) = diff.position {
+            self.position.apply(&mut position_diff);
         }
 
-        if let Some(next_position_diff) = diff.next_position {
-            self.next_position.apply(&next_position_diff);
+        if let Some(mut next_position_diff) = diff.next_position {
+            self.next_position.apply(&mut next_position_diff);
         }
     }
 
@@ -453,7 +404,7 @@ impl Diff for RigidBodyMassProps {
 
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(flags) = diff.flags {
             self.flags = flags;
         }
@@ -704,7 +655,7 @@ impl Diff for RigidBodyVelocity {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(linvel) = diff.linvel {
             self.linvel = linvel;
         }
@@ -1013,7 +964,7 @@ impl Diff for RigidBodyDamping {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(linear_damping) = diff.linear_damping {
             self.linear_damping = linear_damping;
         }
@@ -1098,7 +1049,7 @@ impl Diff for RigidBodyForces {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(force) = diff.force {
             self.force = force;
         }
@@ -1246,7 +1197,7 @@ impl Diff for RigidBodyCcd {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(ccd_thickness) = diff.ccd_thickness {
             self.ccd_thickness = ccd_thickness;
         }
@@ -1375,7 +1326,7 @@ impl Diff for RigidBodyIds {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(active_island_id) = diff.active_island_id {
             self.active_island_id = active_island_id;
         }
@@ -1422,7 +1373,7 @@ pub struct RigidBodyColliders(pub Vec<ColliderHandle>);
 //         }
 //     }
 
-//     fn apply(&mut self, diff: &Self::Repr) {
+//     fn apply(&mut self, diff: &mut Self::Repr) {
 //         todo!()
 //     }
 
@@ -1530,7 +1481,7 @@ impl Diff for RigidBodyDominance {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(dominance) = diff.dominance {
             self.0 = dominance;
         }
@@ -1618,7 +1569,7 @@ impl Diff for RigidBodyActivation {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(normalized_linear_threshold) = diff.normalized_linear_threshold {
             self.normalized_linear_threshold = normalized_linear_threshold;
         }

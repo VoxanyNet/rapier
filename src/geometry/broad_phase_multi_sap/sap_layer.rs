@@ -125,12 +125,12 @@ impl Diff for SAPLayer {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         
         // technically there is always a depth diff
-        self.depth.apply(&diff.depth);
+        self.depth.apply(&mut diff.depth);
 
-        self.layer_id.apply(&diff.layer_id);
+        self.layer_id.apply(&mut diff.layer_id);
 
         if let Some(smaller_layer) = diff.smaller_layer {
             self.smaller_layer = smaller_layer

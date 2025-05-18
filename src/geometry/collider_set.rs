@@ -4,11 +4,9 @@ use crate::data::arena::Arena;
 use crate::dynamics::{IslandManager, RigidBodyHandle, RigidBodySet};
 use crate::geometry::{Collider, ColliderChanges, ColliderHandle, ColliderParent};
 use crate::math::Isometry;
-use crate::prelude::SyncRigidBodyHandle;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
-
-use super::SyncColliderHandle;
+use std::u64;
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 #[derive(Clone, Default, Debug, PartialEq)]
@@ -40,8 +38,8 @@ impl Diff for ColliderSet {
         diff
     }
     
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(bodies_diff) = &diff.colliders {
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        if let Some(bodies_diff) = &mut diff.colliders {
             self.colliders.apply(bodies_diff);
         }
     }
@@ -63,10 +61,10 @@ impl ColliderSet {
         }
     }
 
-    pub fn get_local_index(&self, sync_collider_handle: SyncColliderHandle) -> Option<ColliderHandle> {
-        match self.colliders.sync_index_map.get(&sync_collider_handle.0) {
-            Some(local_index) => {
-                Some(ColliderHandle(*local_index))
+    pub fn get_local_index(&self, sync_collider_id: u64) -> Option<ColliderHandle> {
+        match self.colliders.sync_index_map.get(&sync_collider_id) {
+            Some((local_index, local_generation)) => {
+                Some(ColliderHandle(crate::data::Index::from_raw_parts(*local_index, *local_generation, sync_collider_id)))
             },
             None => None,
         }
@@ -82,7 +80,7 @@ impl ColliderSet {
 
     /// An always-invalid collider handle.
     pub fn invalid_handle() -> ColliderHandle {
-        ColliderHandle::from_raw_parts(crate::INVALID_U32, crate::INVALID_U32)
+        ColliderHandle::from_raw_parts(crate::INVALID_U32, crate::INVALID_U32, u64::MAX)
     }
 
     /// Iterate through all the colliders on this set.
@@ -127,7 +125,7 @@ impl ColliderSet {
 
     /// Is this collider handle valid?
     pub fn contains(&self, handle: ColliderHandle) -> bool {
-        self.colliders.contains(handle.0)
+        self.colliders.contains(&mut handle.0.clone())
     }
 
     /// Inserts a new collider to this set and retrieve its handle.
@@ -146,7 +144,7 @@ impl ColliderSet {
     pub fn insert_with_parent(
         &mut self,
         coll: impl Into<Collider>,
-        parent_handle: RigidBodyHandle,
+        parent_handle: &mut RigidBodyHandle,
         bodies: &mut RigidBodySet,
     ) -> ColliderHandle {
         let mut coll = coll.into();
@@ -155,10 +153,10 @@ impl ColliderSet {
         coll.reset_internal_references();
 
         if let Some(prev_parent) = &mut coll.parent {
-            prev_parent.handle = parent_handle;
+            prev_parent.handle = *parent_handle;
         } else {
             coll.parent = Some(ColliderParent {
-                handle: parent_handle,
+                handle: *parent_handle,
                 pos_wrt_parent: coll.pos.0,
             });
         }
@@ -168,10 +166,10 @@ impl ColliderSet {
         let parent = bodies
         .get_mut_internal_with_modification_tracking(parent_handle)
         .expect("Parent rigid body not found.");
-    let handle = ColliderHandle(self.colliders.insert(coll));
+    let mut handle = ColliderHandle(self.colliders.insert(coll));
         self.modified_colliders.push(handle);
 
-        let coll = self.colliders.get_mut(handle.0).unwrap();
+        let coll = self.colliders.get_mut(&mut handle.0).unwrap();
         parent.add_collider_internal(
             handle,
             coll.parent.as_mut().unwrap(),
@@ -190,7 +188,7 @@ impl ColliderSet {
         new_parent_handle: Option<RigidBodyHandle>,
         bodies: &mut RigidBodySet
     ) {
-        if let Some(collider) = self.get_mut(handle) {
+        if let Some(collider) = self.get_mut(&mut handle.clone()) {
             let curr_parent = collider.parent.map(|p| p.handle);
             if new_parent_handle == curr_parent {
                 return; // Nothing to do, this is the same parent.
@@ -199,7 +197,7 @@ impl ColliderSet {
             collider.changes |= ColliderChanges::PARENT;
 
             if let Some(parent_handle) = curr_parent {
-                if let Some(rb) = bodies.get_mut(parent_handle) {
+                if let Some(rb) = bodies.get_mut(&mut parent_handle.clone()) {
                     rb.remove_collider_internal(handle);
                 }
             }
@@ -215,7 +213,7 @@ impl ColliderSet {
                         })
                     };
 
-                    if let Some(rb) = bodies.get_mut(new_parent_handle) {
+                    if let Some(rb) = bodies.get_mut(&mut new_parent_handle.clone()) {
                         rb.add_collider_internal(
                             handle,
                             collider.parent.as_ref().unwrap(),
@@ -250,7 +248,7 @@ impl ColliderSet {
         // modification flag is updated properly.
         if let Some(parent) = &collider.parent {
             if let Some(parent_rb) =
-                bodies.get_mut_internal_with_modification_tracking(parent.handle)
+                bodies.get_mut_internal_with_modification_tracking(&mut parent.handle.clone())
             {
                 parent_rb.remove_collider_internal(handle);
 
@@ -302,7 +300,7 @@ impl ColliderSet {
 
     /// Get the collider with the given handle.
     pub fn get(&self, handle: ColliderHandle) -> Option<&Collider> {
-        self.colliders.get(handle.0)
+        self.colliders.get(&mut handle.0.clone())
     }
 
     fn mark_as_modified(
@@ -318,18 +316,18 @@ impl ColliderSet {
 
     /// Gets a mutable reference to the collider with the given handle.
     #[cfg(not(feature = "dev-remove-slow-accessors"))]
-    pub fn get_mut(&mut self, handle: ColliderHandle) -> Option<&mut Collider> {
-        let result = self.colliders.get_mut(handle.0)?;
-        Self::mark_as_modified(handle, result, &mut self.modified_colliders);
+    pub fn get_mut(&mut self, handle: &mut ColliderHandle) -> Option<&mut Collider> {
+        let result = self.colliders.get_mut(&mut handle.0)?;
+        Self::mark_as_modified(*handle, result, &mut self.modified_colliders);
         Some(result)
     }
 
     pub(crate) fn index_mut_internal(&mut self, handle: ColliderHandle) -> &mut Collider {
-        &mut self.colliders[handle.0]
+        &mut self.colliders[&mut handle.0.clone()]
     }
 
     pub(crate) fn get_mut_internal(&mut self, handle: ColliderHandle) -> Option<&mut Collider> {
-        self.colliders.get_mut(handle.0)
+        self.colliders.get_mut(&mut handle.0.clone())
     }
 
     // Just a very long name instead of `.get_mut` to make sure
@@ -339,7 +337,7 @@ impl ColliderSet {
         &mut self,
         handle: ColliderHandle,
     ) -> Option<&mut Collider> {
-        let result = self.colliders.get_mut(handle.0)?;
+        let result = self.colliders.get_mut(&mut handle.0.clone())?;
         Self::mark_as_modified(handle, result, &mut self.modified_colliders);
         Some(result)
     }
@@ -349,7 +347,7 @@ impl Index<crate::data::Index> for ColliderSet {
     type Output = Collider;
 
     fn index(&self, index: crate::data::Index) -> &Collider {
-        &self.colliders[index]
+        &self.colliders[&mut index.clone()]
     }
 }
 
@@ -357,14 +355,14 @@ impl Index<ColliderHandle> for ColliderSet {
     type Output = Collider;
 
     fn index(&self, index: ColliderHandle) -> &Collider {
-        &self.colliders[index.0]
+        &self.colliders[&mut index.0.clone()]
     }
 }
 
 #[cfg(not(feature = "dev-remove-slow-accessors"))]
 impl IndexMut<ColliderHandle> for ColliderSet {
     fn index_mut(&mut self, handle: ColliderHandle) -> &mut Collider {
-        let collider = &mut self.colliders[handle.0];
+        let collider = &mut self.colliders[&mut handle.0.clone()];
         Self::mark_as_modified(handle, collider, &mut self.modified_colliders);
         collider
     }

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::data::arena::SyncIndex;
 use crate::data::Index;
 use crate::dynamics::{
     LockedAxes, MassProperties, RigidBodyActivation, RigidBodyAdditionalMassProps, RigidBodyCcd,
@@ -11,7 +10,7 @@ use crate::geometry::{
     ColliderHandle, ColliderMassProps, ColliderParent, ColliderPosition, ColliderSet, ColliderShape,
 };
 use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector};
-use crate::prelude::{Collider, ColliderHandleDiff, SyncColliderHandle, SyncColliderHandleDiff};
+use crate::prelude::{Collider, ColliderHandleDiff};
 use crate::utils::SimdCross;
 use diff::{Diff, VecDiff};
 use num::Zero;
@@ -169,8 +168,8 @@ impl Diff for RigidBody {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(pos) = &diff.pos {
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        if let Some(pos) = &mut diff.pos {
             self.pos.apply(pos);
         }
 
@@ -182,7 +181,7 @@ impl Diff for RigidBody {
         //     self.integrated_vels.apply(integrated_vels);
         // }
 
-        if let Some(vels) = &diff.vels {
+        if let Some(vels) = &mut diff.vels {
             self.vels.apply(vels);
         }
 
@@ -202,11 +201,11 @@ impl Diff for RigidBody {
         //     self.ids.apply(ids);
         // }
 
-        if let Some(colliders) = &diff.colliders {
+        if let Some(colliders) = &mut diff.colliders {
             self.colliders.apply(colliders);
         }
 
-        if let Some(activation) = &diff.activation {
+        if let Some(activation) = &mut diff.activation {
             self.activation.apply(activation);
         }
 
@@ -214,7 +213,7 @@ impl Diff for RigidBody {
         //     self.changes.apply(changes);
         // }
 
-        if let Some(body_type) = &diff.body_type {
+        if let Some(body_type) = &mut diff.body_type {
             self.body_type.apply(body_type);
         }
 

@@ -7,7 +7,7 @@ use crate::geometry::{
 use crate::math::{AngVector, Isometry, Point, Real, Rotation, Vector, DIM};
 use crate::parry::transformation::vhacd::VHACDParameters;
 use crate::pipeline::{ActiveEvents, ActiveHooks};
-use crate::prelude::{ColliderEnabled, SyncRigidBodyHandle};
+use crate::prelude::{ColliderEnabled};
 use diff::{Diff, OptionDiff};
 use na::Unit;
 use parry::bounding_volume::{Aabb, BoundingVolume};
@@ -123,7 +123,7 @@ impl Diff for Collider {
         diff
     }
 
-    fn apply(&mut self, diff: &Self::Repr) {
+    fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(coll_type) = &diff.coll_type {
             self.coll_type = *coll_type
         }
@@ -141,7 +141,7 @@ impl Diff for Collider {
         //     self.changes = *changes
         // }
 
-        if let Some(parent) = &diff.parent {
+        if let Some(parent) = &mut diff.parent {
             self.parent.apply(parent);
         }
 

@@ -18,8 +18,8 @@ impl<T> Coarena<T> {
         self.data
             .iter()
             .enumerate()
-            .filter(|(_, elt)| elt.0 != u32::MAX)
-            .map(|(i, elt)| (Index::from_raw_parts(i as u32, elt.0), &elt.1))
+            .filter(|(_, elt)| elt.0 != u32::MAX)              
+            .map(|(i, elt)| (Index::from_raw_parts(i as u32, elt.0, u64::MAX), &elt.1)) // the sync_id shouldnt really matter here
     }
 
     /// Gets a specific element from the coarena without specifying its generation number.

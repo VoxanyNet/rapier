@@ -1,3 +1,5 @@
+use std::u64;
+
 use crate::data::{Arena, Coarena, Index};
 use crate::dynamics::joint::MultibodyLink;
 use crate::dynamics::{GenericJoint, Multibody, MultibodyJoint, RigidBodyHandle};
@@ -23,8 +25,8 @@ impl MultibodyJointHandle {
     }
 
     /// Reconstructs an handle from its (index, generation) components.
-    pub fn from_raw_parts(id: u32, generation: u32) -> Self {
-        Self(Index::from_raw_parts(id, generation))
+    pub fn from_raw_parts(id: u32, generation: u32, sync_id: u64) -> Self {
+        Self(Index::from_raw_parts(id, generation, sync_id))
     }
 
     /// An always-invalid rigid-body handle.
@@ -32,6 +34,7 @@ impl MultibodyJointHandle {
         Self(Index::from_raw_parts(
             crate::INVALID_U32,
             crate::INVALID_U32,
+            u64::MAX
         ))
     }
 }
@@ -78,6 +81,7 @@ impl Default for MultibodyLinkId {
             multibody: MultibodyIndex(Index::from_raw_parts(
                 crate::INVALID_U32,
                 crate::INVALID_U32,
+                u64::MAX
             )),
             id: 0,
         }
@@ -123,7 +127,7 @@ impl MultibodyJointSet {
             .iter()
             .filter(|(_, link)| link.id > 0) // The first link of a rigid-body hasn’t been added by the user.
             .map(|(h, link)| {
-                let mb = &self.multibodies[link.multibody.0];
+                let mb = &self.multibodies[&mut link.multibody.0.clone()]; 
                 (MultibodyJointHandle(h), link, mb, mb.link(link.id).unwrap())
             })
     }
@@ -189,7 +193,7 @@ impl MultibodyJointSet {
         self.rb2mb.insert(body2.0, link2);
 
         let mb2 = self.multibodies.remove(link2.multibody.0).unwrap();
-        let multibody1 = &mut self.multibodies[link1.multibody.0];
+        let multibody1 = &mut self.multibodies[&mut link1.multibody.0.clone()];
 
         for mb_link2 in mb2.links() {
             let link = self.rb2mb.get_mut(mb_link2.rigid_body.0).unwrap();
@@ -245,7 +249,7 @@ impl MultibodyJointSet {
                         }
                     } else {
                         let mb_id = self.multibodies.insert(multibody);
-                        for link in self.multibodies[mb_id].links() {
+                        for link in self.multibodies[&mut mb_id.clone()].links() {
                             let ids = self.rb2mb.get_mut(link.rigid_body.0).unwrap();
                             ids.multibody = MultibodyIndex(mb_id);
                             ids.id = link.internal_id;
@@ -309,14 +313,14 @@ impl MultibodyJointSet {
 
     /// Gets a reference to a multibody, based on its temporary index.
     pub fn get_multibody(&self, index: MultibodyIndex) -> Option<&Multibody> {
-        self.multibodies.get(index.0)
+        self.multibodies.get(&mut index.0.clone())
     }
 
     /// Gets a mutable reference to a multibody, based on its temporary index.
     /// `MultibodyJointSet`.
     pub fn get_multibody_mut(&mut self, index: MultibodyIndex) -> Option<&mut Multibody> {
         // TODO: modification tracking.
-        self.multibodies.get_mut(index.0)
+        self.multibodies.get_mut(&mut index.0.clone())
     }
 
     /// Gets a mutable reference to a multibody, based on its temporary index.
@@ -324,20 +328,20 @@ impl MultibodyJointSet {
     /// This method will bypass any modification-detection automatically done by the
     /// `MultibodyJointSet`.
     pub fn get_multibody_mut_internal(&mut self, index: MultibodyIndex) -> Option<&mut Multibody> {
-        self.multibodies.get_mut(index.0)
+        self.multibodies.get_mut(&mut index.0.clone())
     }
 
     /// Gets a reference to the multibody identified by its `handle`.
     pub fn get(&self, handle: MultibodyJointHandle) -> Option<(&Multibody, usize)> {
         let link = self.rb2mb.get(handle.0)?;
-        let multibody = self.multibodies.get(link.multibody.0)?;
+        let multibody = self.multibodies.get(&mut link.multibody.0.clone())?;
         Some((multibody, link.id))
     }
 
     /// Gets a mutable reference to the multibody identified by its `handle`.
     pub fn get_mut(&mut self, handle: MultibodyJointHandle) -> Option<(&mut Multibody, usize)> {
         let link = self.rb2mb.get(handle.0)?;
-        let multibody = self.multibodies.get_mut(link.multibody.0)?;
+        let multibody = self.multibodies.get_mut(&mut link.multibody.0.clone())?;
         Some((multibody, link.id))
     }
 
@@ -350,7 +354,7 @@ impl MultibodyJointSet {
     ) -> Option<(&mut Multibody, usize)> {
         // TODO: modification tracking?
         let link = self.rb2mb.get(handle.0)?;
-        let multibody = self.multibodies.get_mut(link.multibody.0)?;
+        let multibody = self.multibodies.get_mut(&mut link.multibody.0.clone())?;
         Some((multibody, link.id))
     }
 
@@ -366,11 +370,11 @@ impl MultibodyJointSet {
     pub fn get_unknown_gen(&self, i: u32) -> Option<(&Multibody, usize, MultibodyJointHandle)> {
         let link = self.rb2mb.get_unknown_gen(i)?;
         let gen = self.rb2mb.get_gen(i)?;
-        let multibody = self.multibodies.get(link.multibody.0)?;
+        let multibody = self.multibodies.get(&mut link.multibody.0.clone())?;
         Some((
             multibody,
             link.id,
-            MultibodyJointHandle(Index::from_raw_parts(i, gen)),
+            MultibodyJointHandle(Index::from_raw_parts(i, gen, u64::MAX)), // sync id shouldnt matter here
         ))
     }
 
@@ -388,7 +392,7 @@ impl MultibodyJointSet {
             return None;
         }
 
-        let mb = self.multibodies.get(id1.multibody.0)?;
+        let mb = self.multibodies.get(&mut id1.multibody.0.clone())?;
 
         // NOTE: if there is a joint between these two bodies, then
         //       one of the bodies must be the parent of the other.
@@ -462,7 +466,7 @@ impl std::ops::Index<MultibodyIndex> for MultibodyJointSet {
     type Output = Multibody;
 
     fn index(&self, index: MultibodyIndex) -> &Multibody {
-        &self.multibodies[index.0]
+        &self.multibodies[&mut index.0.clone()]
     }
 }
 

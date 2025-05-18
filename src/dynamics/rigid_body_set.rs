@@ -1,17 +1,14 @@
 use diff::Diff;
 
 use crate::data::arena::ArenaDiff;
-use crate::data::{Arena};
+use crate::data::{Arena, Index};
 use crate::dynamics::{
     ImpulseJointSet, IslandManager, MultibodyJointSet, RigidBody, RigidBodyChanges, RigidBodyHandle,
 };
 use crate::geometry::ColliderSet;
-use crate::prelude::{ColliderHandle, SyncColliderHandle};
+use crate::prelude::{ColliderHandle};
 use core::sync;
 use std::collections::HashMap;
-use std::ops::{Index, IndexMut};
-
-use super::SyncRigidBodyHandle;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
@@ -66,8 +63,8 @@ impl Diff for RigidBodySet {
         diff
     }
     
-    fn apply(&mut self, diff: &Self::Repr) {
-        if let Some(bodies_diff) = &diff.bodies {
+    fn apply(&mut self, diff: &mut Self::Repr) {
+        if let Some(bodies_diff) = &mut diff.bodies {
             self.bodies.apply(bodies_diff);
         }
     }
@@ -94,35 +91,28 @@ impl RigidBodySet {
         std::mem::take(&mut self.modified_bodies)
     }
 
-    pub fn get_sync_handle(&self, local_handle: RigidBodyHandle) -> Option<SyncRigidBodyHandle> {
-        match self.bodies.index_sync_map.get(&local_handle.0) {
-            Some(sync_index) => Some(SyncRigidBodyHandle(*sync_index)),
-            None => None,
-        }
-    }
-
-    pub fn get_local_index(&self, sync_rigid_body_handle: SyncRigidBodyHandle) -> Option<RigidBodyHandle> {
-        match self.bodies.sync_index_map.get(&sync_rigid_body_handle.0) {
-            Some(local_index) => {
-                Some(RigidBodyHandle(*local_index))
+    pub fn get_local_index(&self, sync_id: u64) -> Option<RigidBodyHandle> {
+        match self.bodies.sync_index_map.get(&sync_id) {
+            Some((local_index, local_generation)) => {
+                Some(RigidBodyHandle(Index::from_raw_parts(*local_index, *local_generation, sync_id)))
             },
             None => None,
         }
     }
 
-    pub fn get_sync(&self, sync_handle: SyncRigidBodyHandle) -> Option<&RigidBody> {
-        match self.bodies.sync_index_map.get(&sync_handle.0) {
-            Some(rigid_body_index) => {
-                self.bodies.get(*rigid_body_index)  // this will always be Some
+    pub fn get_sync(&self, sync_id: u64) -> Option<&RigidBody> {
+        match self.bodies.sync_index_map.get(&sync_id) {
+            Some((rigid_body_index, rigid_body_generation)) => {
+                self.bodies.get(&mut Index::from_raw_parts(*rigid_body_index, *rigid_body_generation, sync_id))  
             },
             None => None,
         }
     }
 
-    pub fn get_sync_mut(&mut self, sync_handle: SyncRigidBodyHandle) -> Option<&mut RigidBody> {
-        match self.bodies.sync_index_map.get(&sync_handle.0) {
-            Some(rigid_body_index) => {
-                self.bodies.get_mut(*rigid_body_index)  // this will always be Some
+    pub fn get_sync_mut(&mut self, sync_id: u64) -> Option<&mut RigidBody> {
+        match self.bodies.sync_index_map.get(&sync_id) {
+            Some((rigid_body_index, rigid_body_generation)) => {
+                self.bodies.get_mut(&mut Index::from_raw_parts(*rigid_body_index, *rigid_body_generation, sync_id)) 
             },
             None => None,
         }
@@ -140,7 +130,7 @@ impl RigidBodySet {
 
     /// Is the given body handle valid?
     pub fn contains(&self, handle: RigidBodyHandle) -> bool {
-        self.bodies.contains(handle.0)
+        self.bodies.contains(&mut handle.0.clone())
     }
 
     /// Insert a rigid body into this set and retrieve its handle.
@@ -166,7 +156,7 @@ impl RigidBodySet {
         multibody_joints: &mut MultibodyJointSet,
         remove_attached_colliders: bool,
     ) -> Option<RigidBody> {
-        let rb = self.bodies.remove(handle.0)?;
+        let mut rb = self.bodies.remove(handle.0)?;
         /*
          * Update active sets.
          */
@@ -230,7 +220,7 @@ impl RigidBodySet {
 
     /// Gets the rigid-body with the given handle.
     pub fn get(&self, handle: RigidBodyHandle) -> Option<&RigidBody> {
-        self.bodies.get(handle.0)
+        self.bodies.get(&mut handle.0.clone())
     }
 
     pub(crate) fn mark_as_modified(
@@ -246,28 +236,28 @@ impl RigidBodySet {
 
     /// Gets a mutable reference to the rigid-body with the given handle.
     #[cfg(not(feature = "dev-remove-slow-accessors"))]
-    pub fn get_mut(&mut self, handle: RigidBodyHandle) -> Option<&mut RigidBody> {
-        let result = self.bodies.get_mut(handle.0)?;
-        Self::mark_as_modified(handle, result, &mut self.modified_bodies);
+    pub fn get_mut(&mut self, handle: &mut RigidBodyHandle) -> Option<&mut RigidBody> {
+        let result = self.bodies.get_mut(&mut handle.0)?;
+        Self::mark_as_modified(*handle, result, &mut self.modified_bodies);
         Some(result)
     }
 
     pub(crate) fn get_mut_internal(&mut self, handle: RigidBodyHandle) -> Option<&mut RigidBody> {
-        self.bodies.get_mut(handle.0)
+        self.bodies.get_mut(&mut handle.0.clone())
     }
 
     pub(crate) fn index_mut_internal(&mut self, handle: RigidBodyHandle) -> &mut RigidBody {
-        &mut self.bodies[handle.0]
+        &mut self.bodies[&mut handle.0.clone()]
     }
 
     // Just a very long name instead of `.get_mut` to make sure
     // this is really the method we wanted to use instead of `get_mut_internal`.
     pub(crate) fn get_mut_internal_with_modification_tracking(
         &mut self,
-        handle: RigidBodyHandle,
+        handle: &mut RigidBodyHandle,
     ) -> Option<&mut RigidBody> {
-        let result = self.bodies.get_mut(handle.0)?;
-        Self::mark_as_modified(handle, result, &mut self.modified_bodies);
+        let result = self.bodies.get_mut(&mut handle.0)?;
+        Self::mark_as_modified(*handle, result, &mut self.modified_bodies);
         Some(result)
     }
 
@@ -298,7 +288,7 @@ impl RigidBodySet {
         for body in self.modified_bodies.iter().filter_map(|h| self.get(*h)) {
             if body.changes.contains(RigidBodyChanges::POSITION) {
                 for handle in body.colliders() {
-                    if let Some(collider) = colliders.get_mut(*handle) {
+                    if let Some(collider) = colliders.get_mut(&mut handle.clone()) {
                         let new_pos = body.position() * collider.position_wrt_parent().unwrap();
                         collider.set_position(new_pos);
                     }
@@ -308,26 +298,26 @@ impl RigidBodySet {
     }
 }
 
-impl Index<RigidBodyHandle> for RigidBodySet {
+impl std::ops::Index<RigidBodyHandle> for RigidBodySet {
     type Output = RigidBody;
 
     fn index(&self, index: RigidBodyHandle) -> &RigidBody {
-        &self.bodies[index.0]
+        &self.bodies[&mut index.0.clone()]
     }
 }
 
-impl Index<crate::data::Index> for RigidBodySet {
+impl std::ops::Index<crate::data::Index> for RigidBodySet {
     type Output = RigidBody;
 
     fn index(&self, index: crate::data::Index) -> &RigidBody {
-        &self.bodies[index]
+        &self.bodies[&mut index.clone()]
     }
 }
 
 #[cfg(not(feature = "dev-remove-slow-accessors"))]
-impl IndexMut<RigidBodyHandle> for RigidBodySet {
+impl std::ops::IndexMut<RigidBodyHandle> for RigidBodySet {
     fn index_mut(&mut self, handle: RigidBodyHandle) -> &mut RigidBody {
-        let rb = &mut self.bodies[handle.0];
+        let rb = &mut self.bodies[&mut handle.0.clone()];
         Self::mark_as_modified(handle, rb, &mut self.modified_bodies);
         rb
     }
