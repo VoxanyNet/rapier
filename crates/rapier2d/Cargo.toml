@@ -66,8 +66,8 @@ required-features = ["dim2", "f32"]
 vec_map = { version = "0.8", optional = true }
 instant = { version = "0.1", features = ["now"], optional = true }
 num-traits = "0.2"
-nalgebra = {path = "/home/kruz/repos/nalgebra"}
-parry2d = {path = "/home/kruz/repos/parry/crates/parry2d"}
+nalgebra = {git = "https://github.com/VoxanyNet/nalgebra", rev = "e780eebdce5dbfcf09a82164142295036d2904cb"}
+parry2d = {git = "https://github.com/VoxanyNet/parry", rev = "b1663f398302769d29de3fe9417d06fc11d0f57d"}
 simba = "0.9"
 approx = "0.5"
 rayon = { version = "1", optional = true }
@@ -82,7 +82,7 @@ bitflags = "2"
 log = "0.4"
 ordered-float = "4"
 thiserror = "1"
-diff-struct = {path = "/home/kruz/repos/diff-struct"}
+diff-struct = {git = "https://github.com/VoxanyNet/diff-struct", rev = "9f3990a29011bbbb84c40ca21f110ef8a1d343d0"}
 uuid = { version = "1.16.0", features = ["v4"] }
 
 [dev-dependencies]
