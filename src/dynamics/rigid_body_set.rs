@@ -1,4 +1,4 @@
-use diff::Diff;
+use diff::{Diff, VecDiff};
 
 use crate::data::arena::ArenaDiff;
 use crate::data::{Arena, Index};
@@ -42,7 +42,8 @@ pub struct RigidBodySet {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct RigidBodySetDiff {
-    pub bodies: Option<ArenaDiff<RigidBody>>
+    pub bodies: Option<ArenaDiff<RigidBody>>,
+    pub modified_bodies: Option<VecDiff<RigidBodyHandle>>
 }
 
 impl Diff for RigidBodySet {
@@ -52,6 +53,7 @@ impl Diff for RigidBodySet {
 
         let mut diff = RigidBodySetDiff {
             bodies: None,
+            modified_bodies: None
         };
 
         if other.bodies != self.bodies {
@@ -60,12 +62,20 @@ impl Diff for RigidBodySet {
 
         };
 
+        if other.modified_bodies != self.modified_bodies {
+            diff.modified_bodies = Some(self.modified_bodies.diff(&other.modified_bodies))
+        }
+
         diff
     }
     
     fn apply(&mut self, diff: &mut Self::Repr) {
         if let Some(bodies_diff) = &mut diff.bodies {
             self.bodies.apply(bodies_diff);
+        }
+
+        if let Some(modified_bodies_diff) = &mut diff.modified_bodies {
+            self.modified_bodies.apply(modified_bodies_diff);
         }
     }
     

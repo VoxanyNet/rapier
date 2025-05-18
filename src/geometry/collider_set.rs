@@ -1,4 +1,4 @@
-use diff::Diff;
+use diff::{Diff, VecDiff};
 
 use crate::data::arena::Arena;
 use crate::dynamics::{IslandManager, RigidBodyHandle, RigidBodySet};
@@ -19,7 +19,9 @@ pub struct ColliderSet {
 
 #[cfg_attr(feature = "serde-serialize", derive(Serialize, Deserialize))]
 pub struct ColliderSetDiff {
-    pub colliders: Option<<Arena<Collider> as Diff>::Repr>
+    pub colliders: Option<<Arena<Collider> as Diff>::Repr>,
+    pub modified_colliders: Option<VecDiff<ColliderHandle>>,
+    pub removed_colliders: Option<VecDiff<ColliderHandle>>
 }
 
 impl Diff for ColliderSet {
@@ -29,11 +31,21 @@ impl Diff for ColliderSet {
 
         let mut diff = ColliderSetDiff {
             colliders: None,
+            modified_colliders: None,
+            removed_colliders: None
         };
 
         if other.colliders != self.colliders  {
             diff.colliders = Some(self.colliders.diff(&other.colliders));
         };
+
+        if other.modified_colliders != self.modified_colliders {
+            diff.modified_colliders = Some(self.modified_colliders.diff(&other.modified_colliders));
+        }
+
+        if other.removed_colliders != self.removed_colliders {
+            diff.removed_colliders = Some(self.removed_colliders.diff(&other.removed_colliders));
+        }
 
         diff
     }
