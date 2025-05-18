@@ -759,8 +759,21 @@ impl<T> Arena<T> {
     /// assert!(arena.get_mut(idx).is_none());
     /// ```
     pub fn get_mut(&mut self, i: &mut Index) -> Option<&mut T> {
+
+         // we need to resolve the local index
+        if i.synced == false {
+            let (local_index, local_generation) = self.sync_index_map.get(&i.sync_id).unwrap();
+
+            i.index = *local_index;
+
+            i.generation = *local_generation;
+
+            i.synced = true;
+
+        }
+
         match self.items.get_mut(i.index as usize) {
-            Some(Entry::Occupied { generation, value, sync_id }) if *generation == i.generation => {
+            Some(Entry::Occupied { generation, value, sync_id: _ }) if *generation == i.generation => {
                 Some(value)
             }
             _ => None,
