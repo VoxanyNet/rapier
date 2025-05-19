@@ -452,7 +452,7 @@ impl PhysicsPipeline {
             colliders,
             impulse_joints,
             multibody_joints,
-            &modified_bodies,
+            &mut modified_bodies,
             &mut modified_colliders,
         );
 
@@ -494,7 +494,7 @@ impl PhysicsPipeline {
 
         if let Some(queries) = query_pipeline.as_deref_mut() {
             self.counters.stages.query_pipeline_time.start();
-            queries.update_incremental(colliders, &modified_colliders, &removed_colliders, false);
+            queries.update_incremental(colliders, &mut modified_colliders, &removed_colliders, false);
             self.counters.stages.query_pipeline_time.pause();
         }
 
@@ -634,7 +634,7 @@ impl PhysicsPipeline {
                 self.counters.stages.query_pipeline_time.resume();
                 queries.update_incremental(
                     colliders,
-                    &modified_colliders,
+                    &mut modified_colliders,
                     &[],
                     remaining_substeps == 0,
                 );

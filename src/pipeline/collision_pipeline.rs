@@ -118,7 +118,7 @@ impl CollisionPipeline {
         hooks: &dyn PhysicsHooks,
         events: &dyn EventHandler,
     ) {
-        let modified_bodies = bodies.take_modified();
+        let mut modified_bodies = bodies.take_modified();
         let mut modified_colliders = colliders.take_modified();
         let mut removed_colliders = colliders.take_removed();
 
@@ -133,7 +133,7 @@ impl CollisionPipeline {
             colliders,
             &mut ImpulseJointSet::new(),
             &mut MultibodyJointSet::new(),
-            &modified_bodies,
+            &mut modified_bodies,
             &mut modified_colliders,
         );
 
@@ -159,7 +159,7 @@ impl CollisionPipeline {
         );
 
         if let Some(queries) = query_pipeline {
-            queries.update_incremental(colliders, &modified_colliders, &removed_colliders, true);
+            queries.update_incremental(colliders, &mut modified_colliders, &removed_colliders, true);
         }
 
         self.clear_modified_colliders(colliders, &mut modified_colliders);

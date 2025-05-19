@@ -315,7 +315,7 @@ impl QueryPipeline {
     pub fn update_incremental(
         &mut self,
         colliders: &ColliderSet,
-        modified_colliders: &[ColliderHandle],
+        modified_colliders: &mut [ColliderHandle],
         removed_colliders: &[ColliderHandle],
         refit_and_rebalance: bool,
     ) {
@@ -329,7 +329,7 @@ impl QueryPipeline {
 
         for modified in modified_colliders {
             // Check that the collider still exists as it may have been removed.
-            if colliders.contains(*modified) {
+            if colliders.contains(modified) {
                 self.qbvh.pre_update_or_insert(*modified);
             }
         }

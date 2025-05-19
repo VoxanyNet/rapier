@@ -142,8 +142,8 @@ impl ImpulseJointSet {
     }
 
     /// Is the given joint handle valid?
-    pub fn contains(&self, handle: ImpulseJointHandle) -> bool {
-        self.joint_ids.contains(&mut handle.0.clone())
+    pub fn contains(&self, handle: &mut ImpulseJointHandle) -> bool {
+        self.joint_ids.contains(&mut handle.0)
     }
 
     /// Gets the joint with the given handle.

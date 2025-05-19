@@ -136,8 +136,8 @@ impl ColliderSet {
     }
 
     /// Is this collider handle valid?
-    pub fn contains(&self, handle: ColliderHandle) -> bool {
-        self.colliders.contains(&mut handle.0.clone())
+    pub fn contains(&self, handle: &mut ColliderHandle) -> bool {
+        self.colliders.contains(&mut handle.0)
     }
 
     /// Inserts a new collider to this set and retrieve its handle.

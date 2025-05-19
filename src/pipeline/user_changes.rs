@@ -47,7 +47,7 @@ pub(crate) fn handle_user_changes_to_rigid_bodies(
     colliders: &mut ColliderSet,
     impulse_joints: &mut ImpulseJointSet,
     _multibody_joints: &mut MultibodyJointSet, // FIXME: propagate disabled state to multibodies
-    modified_bodies: &[RigidBodyHandle],
+    modified_bodies: &mut [RigidBodyHandle],
     modified_colliders: &mut Vec<ColliderHandle>,
 ) {
     enum FinalAction {
@@ -59,7 +59,7 @@ pub(crate) fn handle_user_changes_to_rigid_bodies(
     for handle in modified_bodies {
         let mut final_action = None;
 
-        if !bodies.contains(*handle) {
+        if !bodies.contains(handle) {
             // The body no longer exists.
             continue;
         }

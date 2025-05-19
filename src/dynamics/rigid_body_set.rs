@@ -139,8 +139,8 @@ impl RigidBodySet {
     }
 
     /// Is the given body handle valid?
-    pub fn contains(&self, handle: RigidBodyHandle) -> bool {
-        self.bodies.contains(&mut handle.0.clone())
+    pub fn contains(&self, handle: &mut RigidBodyHandle) -> bool {
+        self.bodies.contains(&mut handle.0)
     }
 
     /// Insert a rigid body into this set and retrieve its handle.
