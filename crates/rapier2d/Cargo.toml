@@ -83,6 +83,7 @@ log = "0.4"
 ordered-float = "4"
 thiserror = "1"
 diff-struct = "0.5.3"
+serde_json = "1"
 
 [dev-dependencies]
 bincode = "1"
